@@ -358,6 +358,9 @@ async function runQuery(
   prompt: string,
   sessionId: string | undefined,
   mcpServerPath: string,
+  seafileMcpPath: string,
+  fastmailMcpPath: string,
+  workflowyMcpPath: string,
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
@@ -432,7 +435,10 @@ async function runQuery(
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
-        'mcp__nanoclaw__*'
+        'mcp__nanoclaw__*',
+        'mcp__seafile__*',
+        'mcp__fastmail__*',
+        'mcp__workflowy__*'
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -448,6 +454,35 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
+        ...(containerInput.isMain && sdkEnv.SEAFILE_URL && sdkEnv.SEAFILE_TOKEN ? {
+          seafile: {
+            command: 'node',
+            args: [seafileMcpPath],
+            env: {
+              SEAFILE_URL: sdkEnv.SEAFILE_URL,
+              SEAFILE_TOKEN: sdkEnv.SEAFILE_TOKEN,
+            },
+          },
+        } : {}),
+        ...(containerInput.isMain && sdkEnv.FASTMAIL_EMAIL && sdkEnv.FASTMAIL_APP_PASSWORD ? {
+          fastmail: {
+            command: 'node',
+            args: [fastmailMcpPath],
+            env: {
+              FASTMAIL_EMAIL: sdkEnv.FASTMAIL_EMAIL,
+              FASTMAIL_APP_PASSWORD: sdkEnv.FASTMAIL_APP_PASSWORD,
+            },
+          },
+        } : {}),
+        ...(containerInput.isMain && sdkEnv.WORKFLOWY_API_KEY ? {
+          workflowy: {
+            command: 'node',
+            args: [workflowyMcpPath],
+            env: {
+              WORKFLOWY_API_KEY: sdkEnv.WORKFLOWY_API_KEY,
+            },
+          },
+        } : {}),
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
@@ -514,9 +549,13 @@ async function main(): Promise<void> {
   for (const [key, value] of Object.entries(containerInput.secrets || {})) {
     sdkEnv[key] = value;
   }
+  log(`SDK env has SEAFILE_URL: ${!!sdkEnv.SEAFILE_URL}, SEAFILE_TOKEN: ${!!sdkEnv.SEAFILE_TOKEN}, isMain: ${containerInput.isMain}`);
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
+  const seafileMcpPath = path.join(__dirname, 'seafile-mcp-stdio.js');
+  const fastmailMcpPath = path.join(__dirname, 'fastmail-mcp-stdio.js');
+  const workflowyMcpPath = path.join(__dirname, 'workflowy-mcp-stdio.js');
 
   let sessionId = containerInput.sessionId;
   fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
@@ -541,7 +580,7 @@ async function main(): Promise<void> {
     while (true) {
       log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
 
-      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, resumeAt);
+      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, seafileMcpPath, fastmailMcpPath, workflowyMcpPath, containerInput, sdkEnv, resumeAt);
       if (queryResult.newSessionId) {
         sessionId = queryResult.newSessionId;
       }
