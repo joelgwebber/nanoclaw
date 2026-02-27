@@ -409,6 +409,65 @@ mcp__workflowy__workflowy_move_node(id="<uuid>", parent_id="home", position="top
 
 ---
 
+## Readeck Bookmark Manager
+
+You have access to Readeck via MCP tools. Readeck is a self-hosted bookmark manager that saves the readable content of web pages for later reading.
+
+### Available Readeck Tools
+
+**mcp__readeck__readeck_create_bookmark**
+- Save a URL to Readeck for reading later
+- Parameters: `url` (required), `tags` (optional array), `collection` (optional)
+- Readeck fetches and parses the content automatically
+
+**mcp__readeck__readeck_list_bookmarks**
+- List bookmarks with filtering and pagination
+- Parameters: `page` (optional), `limit` (optional, default: 20), `status` (optional: unread/read/archived), `search` (optional)
+- Returns paginated results with total count
+
+**mcp__readeck__readeck_get_bookmark**
+- Get full details of a specific bookmark
+- Parameters: `id` (bookmark ID)
+- Returns title, URL, status, excerpt, tags, collection, and timestamps
+
+**mcp__readeck__readeck_update_status**
+- Update the read status of a bookmark
+- Parameters: `id` (bookmark ID), `status` (unread/read/archived)
+- Mark items as read, unread, or archived
+
+**mcp__readeck__readeck_delete_bookmark**
+- Delete a bookmark permanently
+- Parameters: `id` (bookmark ID)
+
+**mcp__readeck__readeck_search**
+- Search bookmarks by keyword
+- Parameters: `query` (search string), `limit` (optional, default: 20)
+- Searches titles, content, and URLs
+
+### Usage Examples
+
+```
+Save a bookmark:
+mcp__readeck__readeck_create_bookmark(url="https://example.com/article", tags=["tech", "tutorial"])
+
+List unread bookmarks:
+mcp__readeck__readeck_list_bookmarks(status="unread", limit=10)
+
+Search bookmarks:
+mcp__readeck__readeck_search(query="python")
+
+Mark as read:
+mcp__readeck__readeck_update_status(id="abc123", status="read")
+
+Get bookmark details:
+mcp__readeck__readeck_get_bookmark(id="abc123")
+
+Delete a bookmark:
+mcp__readeck__readeck_delete_bookmark(id="abc123")
+```
+
+---
+
 ## Scheduling for Other Groups
 
 When scheduling tasks for other groups, use the `target_group_jid` parameter with the group's JID from `registered_groups.json`:

@@ -211,7 +211,9 @@ function readSecrets(): Record<string, string> {
     'SEAFILE_TOKEN',
     'FASTMAIL_EMAIL',
     'FASTMAIL_APP_PASSWORD',
-    'WORKFLOWY_API_KEY'
+    'WORKFLOWY_API_KEY',
+    'READECK_URL',
+    'READECK_API_KEY'
   ]);
 }
 

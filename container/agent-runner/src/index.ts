@@ -361,6 +361,7 @@ async function runQuery(
   seafileMcpPath: string,
   fastmailMcpPath: string,
   workflowyMcpPath: string,
+  readeckMcpPath: string,
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
@@ -438,7 +439,8 @@ async function runQuery(
         'mcp__nanoclaw__*',
         'mcp__seafile__*',
         'mcp__fastmail__*',
-        'mcp__workflowy__*'
+        'mcp__workflowy__*',
+        'mcp__readeck__*'
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -480,6 +482,16 @@ async function runQuery(
             args: [workflowyMcpPath],
             env: {
               WORKFLOWY_API_KEY: sdkEnv.WORKFLOWY_API_KEY,
+            },
+          },
+        } : {}),
+        ...(containerInput.isMain && sdkEnv.READECK_URL && sdkEnv.READECK_API_KEY ? {
+          readeck: {
+            command: 'node',
+            args: [readeckMcpPath],
+            env: {
+              READECK_URL: sdkEnv.READECK_URL,
+              READECK_API_KEY: sdkEnv.READECK_API_KEY,
             },
           },
         } : {}),
@@ -556,6 +568,7 @@ async function main(): Promise<void> {
   const seafileMcpPath = path.join(__dirname, 'seafile-mcp-stdio.js');
   const fastmailMcpPath = path.join(__dirname, 'fastmail-mcp-stdio.js');
   const workflowyMcpPath = path.join(__dirname, 'workflowy-mcp-stdio.js');
+  const readeckMcpPath = path.join(__dirname, 'readeck-mcp-stdio.js');
 
   let sessionId = containerInput.sessionId;
   fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
@@ -580,7 +593,7 @@ async function main(): Promise<void> {
     while (true) {
       log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
 
-      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, seafileMcpPath, fastmailMcpPath, workflowyMcpPath, containerInput, sdkEnv, resumeAt);
+      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, seafileMcpPath, fastmailMcpPath, workflowyMcpPath, readeckMcpPath, containerInput, sdkEnv, resumeAt);
       if (queryResult.newSessionId) {
         sessionId = queryResult.newSessionId;
       }
