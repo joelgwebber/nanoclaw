@@ -84,3 +84,8 @@ The container buildkit caches aggressively. `--no-cache` alone does NOT invalida
 docker builder prune -af
 ./container/build.sh
 ```
+
+# Agent Instructions
+
+This project uses Yaks to track work. The Yaks skill (activated by the `.yaks/` directory) defines the required workflow — follow it.
+

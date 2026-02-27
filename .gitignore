@@ -32,4 +32,7 @@ groups/global/*
 # Skills system (local per-installation state)
 .nanoclaw/
 
+# Yaks task tracking (local per-installation state)
+.yaks/
+
 agents-sdk-docs

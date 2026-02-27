@@ -362,6 +362,7 @@ async function runQuery(
   fastmailMcpPath: string,
   workflowyMcpPath: string,
   readeckMcpPath: string,
+  substackMcpPath: string,
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
@@ -440,7 +441,8 @@ async function runQuery(
         'mcp__seafile__*',
         'mcp__fastmail__*',
         'mcp__workflowy__*',
-        'mcp__readeck__*'
+        'mcp__readeck__*',
+        'mcp__substack__*'
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -492,6 +494,16 @@ async function runQuery(
             env: {
               READECK_URL: sdkEnv.READECK_URL,
               READECK_API_KEY: sdkEnv.READECK_API_KEY,
+            },
+          },
+        } : {}),
+        ...(containerInput.isMain && sdkEnv.SUBSTACK_SID ? {
+          substack: {
+            command: 'node',
+            args: [substackMcpPath],
+            env: {
+              SUBSTACK_SID: sdkEnv.SUBSTACK_SID,
+              SUBSTACK_LLI: sdkEnv.SUBSTACK_LLI,
             },
           },
         } : {}),
@@ -569,6 +581,7 @@ async function main(): Promise<void> {
   const fastmailMcpPath = path.join(__dirname, 'fastmail-mcp-stdio.js');
   const workflowyMcpPath = path.join(__dirname, 'workflowy-mcp-stdio.js');
   const readeckMcpPath = path.join(__dirname, 'readeck-mcp-stdio.js');
+  const substackMcpPath = path.join(__dirname, 'substack-mcp-stdio.js');
 
   let sessionId = containerInput.sessionId;
   fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
@@ -593,7 +606,7 @@ async function main(): Promise<void> {
     while (true) {
       log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
 
-      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, seafileMcpPath, fastmailMcpPath, workflowyMcpPath, readeckMcpPath, containerInput, sdkEnv, resumeAt);
+      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, seafileMcpPath, fastmailMcpPath, workflowyMcpPath, readeckMcpPath, substackMcpPath, containerInput, sdkEnv, resumeAt);
       if (queryResult.newSessionId) {
         sessionId = queryResult.newSessionId;
       }

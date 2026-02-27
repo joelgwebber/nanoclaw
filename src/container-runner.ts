@@ -223,7 +223,9 @@ function readSecrets(): Record<string, string> {
     'FASTMAIL_APP_PASSWORD',
     'WORKFLOWY_API_KEY',
     'READECK_URL',
-    'READECK_API_KEY'
+    'READECK_API_KEY',
+    'SUBSTACK_SID',
+    'SUBSTACK_LLI'
   ]);
 }
 
