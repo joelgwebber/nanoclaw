@@ -29,6 +29,7 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `/customize` | Adding channels, integrations, changing behavior |
 | `/debug` | Container issues, logs, troubleshooting |
 | `/update` | Pull upstream NanoClaw changes, merge with customizations, run migrations |
+| `/add-workflowy` | Add WorkFlowy integration for outlining, tasks, and note-taking |
 | `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch |
 | `/get-qodo-rules` | Load org- and repo-level coding rules from Qodo before code tasks |
 
@@ -55,6 +56,30 @@ systemctl --user stop nanoclaw
 systemctl --user restart nanoclaw
 ```
 
-## Container Build Cache
+## Updating Agent Runner Code
 
-The container buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild, prune the builder then re-run `./container/build.sh`.
+The agent runner source at `/app/src` is bind-mounted from `data/sessions/main/agent-runner-src/`. This allows runtime compilation without rebuilding the container.
+
+**For source code changes** (adding MCP servers, modifying logic):
+```bash
+# 1. Edit files in container/agent-runner/src/
+# 2. Sync to bind mount
+./scripts/update-agent-source.sh
+# 3. Restart service
+systemctl --user restart nanoclaw  # Linux
+launchctl kickstart -k gui/$(id -u)/com.nanoclaw  # macOS
+```
+
+**For dependency changes** (package.json, system packages):
+```bash
+./container/build.sh  # Full rebuild required
+systemctl --user restart nanoclaw
+```
+
+### Container Build Cache
+
+The container buildkit caches aggressively. `--no-cache` alone does NOT invalidate COPY steps. To force a clean rebuild:
+```bash
+docker builder prune -af
+./container/build.sh
+```
