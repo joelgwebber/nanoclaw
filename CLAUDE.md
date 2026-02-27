@@ -30,6 +30,7 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `/debug` | Container issues, logs, troubleshooting |
 | `/update` | Pull upstream NanoClaw changes, merge with customizations, run migrations |
 | `/add-workflowy` | Add WorkFlowy integration for outlining, tasks, and note-taking |
+| `/add-readeck` | Add Readeck integration for bookmark management and read-it-later |
 | `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch |
 | `/get-qodo-rules` | Load org- and repo-level coding rules from Qodo before code tasks |
 
