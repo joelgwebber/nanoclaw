@@ -80,6 +80,16 @@ function buildVolumeMounts(
       containerPath: '/workspace/group',
       readonly: false,
     });
+
+    // Main gets Seafile synced directory for fast local access
+    const seafileDir = path.join(process.env.HOME || '/home/joel', 'Seafile');
+    if (fs.existsSync(seafileDir)) {
+      mounts.push({
+        hostPath: seafileDir,
+        containerPath: '/workspace/seafile',
+        readonly: false, // Allow writes to sync back to Seafile
+      });
+    }
   } else {
     // Other groups only get their own folder
     mounts.push({
@@ -234,6 +244,12 @@ function buildContainerArgs(
   if (hostUid != null && hostUid !== 0 && hostUid !== 1000) {
     args.push('--user', `${hostUid}:${hostGid}`);
     args.push('-e', 'HOME=/home/node');
+  }
+
+  // Check if Seafile is mounted, and set SEAFILE_LOCAL_PATH
+  const seafileMount = mounts.find(m => m.containerPath === '/workspace/seafile');
+  if (seafileMount) {
+    args.push('-e', 'SEAFILE_LOCAL_PATH=/workspace/seafile');
   }
 
   for (const mount of mounts) {

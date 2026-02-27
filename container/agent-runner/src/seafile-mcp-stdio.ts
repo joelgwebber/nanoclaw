@@ -1,14 +1,17 @@
 /**
  * Seafile MCP Server for NanoClaw
- * Provides file operations for Seafile cloud storage
+ * Provides file operations for Seafile cloud storage with hybrid local/API access
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 const SEAFILE_URL = process.env.SEAFILE_URL!;
 const SEAFILE_TOKEN = process.env.SEAFILE_TOKEN!;
+const SEAFILE_LOCAL_PATH = process.env.SEAFILE_LOCAL_PATH; // Optional: path to local synced libraries
 
 interface SeafileLibrary {
   id: string;
@@ -49,6 +52,68 @@ async function seafileRequest(endpoint: string, options: RequestInit = {}): Prom
   return response.text();
 }
 
+// Cache for library ID -> name mapping
+let libraryCache: Map<string, string> | null = null;
+
+async function getLibraryName(libraryId: string): Promise<string | null> {
+  if (!libraryCache) {
+    const libraries: SeafileLibrary[] = await seafileRequest('/api2/repos/');
+    libraryCache = new Map(libraries.map(lib => [lib.id, lib.name]));
+  }
+  return libraryCache.get(libraryId) || null;
+}
+
+function getLocalPath(libraryName: string, filePath: string): string | null {
+  if (!SEAFILE_LOCAL_PATH) return null;
+  // seaf-cli creates structure: {base}/{library_name}/{library_name}/...
+  return path.join(SEAFILE_LOCAL_PATH, libraryName, libraryName, filePath);
+}
+
+async function tryReadLocal(libraryId: string, filePath: string): Promise<string | null> {
+  if (!SEAFILE_LOCAL_PATH) return null;
+
+  const libraryName = await getLibraryName(libraryId);
+  if (!libraryName) return null;
+
+  const localPath = getLocalPath(libraryName, filePath);
+  if (!localPath) return null;
+
+  try {
+    const content = await fs.readFile(localPath, 'utf-8');
+    return content;
+  } catch (err) {
+    // File doesn't exist locally or can't be read, fall back to API
+    return null;
+  }
+}
+
+async function tryListDirLocal(libraryId: string, dirPath: string): Promise<SeafileDirEntry[] | null> {
+  if (!SEAFILE_LOCAL_PATH) return null;
+
+  const libraryName = await getLibraryName(libraryId);
+  if (!libraryName) return null;
+
+  const localPath = getLocalPath(libraryName, dirPath);
+  if (!localPath) return null;
+
+  try {
+    const entries = await fs.readdir(localPath, { withFileTypes: true });
+    return Promise.all(entries.map(async entry => {
+      const stats = await fs.stat(path.join(localPath, entry.name));
+      return {
+        id: '', // Not available locally
+        name: entry.name,
+        type: entry.isDirectory() ? 'dir' as const : 'file' as const,
+        size: entry.isFile() ? stats.size : undefined,
+        mtime: stats.mtimeMs,
+      };
+    }));
+  } catch (err) {
+    // Directory doesn't exist locally, fall back to API
+    return null;
+  }
+}
+
 const server = new McpServer({
   name: 'seafile',
   version: '1.0.0',
@@ -76,16 +141,29 @@ server.tool(
 
 server.tool(
   'seafile_list_dir',
-  'List contents of a directory in a Seafile library',
+  'List contents of a directory in a Seafile library (uses local sync if available, otherwise API)',
   {
     library_id: z.string().describe('The library/repository ID'),
     path: z.string().default('/').describe('Directory path (default: /)'),
   },
   async (args) => {
-    const encodedPath = encodeURIComponent(args.path);
-    const entries: SeafileDirEntry[] = await seafileRequest(
-      `/api2/repos/${args.library_id}/dir/?p=${encodedPath}`
-    );
+    // Try local access first
+    let entries: SeafileDirEntry[] | null = await tryListDirLocal(args.library_id, args.path);
+    let source = 'local';
+
+    // Fall back to API if local not available
+    if (!entries) {
+      const encodedPath = encodeURIComponent(args.path);
+      entries = await seafileRequest(
+        `/api2/repos/${args.library_id}/dir/?p=${encodedPath}`
+      );
+      source = 'api';
+    }
+
+    // TypeScript guard: entries should always be set at this point
+    if (!entries) {
+      throw new Error('Failed to list directory from both local and API sources');
+    }
 
     const formatted = entries.map(entry => {
       const icon = entry.type === 'dir' ? '📁' : '📄';
@@ -96,7 +174,7 @@ server.tool(
     return {
       content: [{
         type: 'text' as const,
-        text: `Contents of ${args.path}:\n${formatted}\n\nTotal: ${entries.length} items`
+        text: `Contents of ${args.path} [${source}]:\n${formatted}\n\nTotal: ${entries.length} items`
       }]
     };
   }
@@ -104,20 +182,30 @@ server.tool(
 
 server.tool(
   'seafile_read_file',
-  'Read the contents of a file from Seafile',
+  'Read the contents of a file from Seafile (uses local sync if available, otherwise API)',
   {
     library_id: z.string().describe('The library/repository ID'),
     path: z.string().describe('File path'),
   },
   async (args) => {
-    // Get download link
+    // Try local access first
+    const localContent = await tryReadLocal(args.library_id, args.path);
+    if (localContent !== null) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `File: ${args.path} [local]\n\n${localContent}`
+        }]
+      };
+    }
+
+    // Fall back to API
     const encodedPath = encodeURIComponent(args.path);
     const downloadUrl = await seafileRequest(
       `/api2/repos/${args.library_id}/file/?p=${encodedPath}`,
       { method: 'GET' }
     );
 
-    // Download file content
     const response = await fetch(downloadUrl);
     if (!response.ok) {
       throw new Error(`Failed to download file: ${response.statusText}`);
@@ -128,7 +216,7 @@ server.tool(
     return {
       content: [{
         type: 'text' as const,
-        text: `File: ${args.path}\n\n${content}`
+        text: `File: ${args.path} [api]\n\n${content}`
       }]
     };
   }
