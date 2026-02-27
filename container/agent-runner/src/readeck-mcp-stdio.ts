@@ -199,6 +199,43 @@ server.tool(
   }
 );
 
+// Update bookmark properties
+server.tool(
+  'readeck_update_bookmark',
+  'Update bookmark properties such as tags and collection.',
+  {
+    id: z.string().describe('Bookmark ID'),
+    tags: z.array(z.string()).optional().describe('Tags to apply (replaces existing tags)'),
+    collection: z.string().optional().describe('Collection to move bookmark to'),
+  },
+  async (args) => {
+    try {
+      const updates: any = {};
+      if (args.tags !== undefined) updates.tags = args.tags;
+      if (args.collection !== undefined) updates.collection = args.collection;
+
+      if (Object.keys(updates).length === 0) {
+        return {
+          content: [{ type: 'text' as const, text: 'No updates specified. Provide tags or collection to update.' }],
+          isError: true,
+        };
+      }
+
+      await apiRequest(`/api/bookmarks/${args.id}`, 'PUT', updates);
+
+      const updatedFields = Object.keys(updates).join(', ');
+      return {
+        content: [{ type: 'text' as const, text: `Bookmark ${args.id} updated successfully (${updatedFields}).` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 // Update bookmark status
 server.tool(
   'readeck_update_status',

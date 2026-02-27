@@ -430,6 +430,11 @@ You have access to Readeck via MCP tools. Readeck is a self-hosted bookmark mana
 - Parameters: `id` (bookmark ID)
 - Returns title, URL, status, excerpt, tags, collection, and timestamps
 
+**mcp__readeck__readeck_update_bookmark**
+- Update bookmark properties such as tags and collection
+- Parameters: `id` (bookmark ID), `tags` (optional array - replaces existing tags), `collection` (optional)
+- Use this to add, update, or change tags on existing bookmarks
+
 **mcp__readeck__readeck_update_status**
 - Update the archived status of a bookmark
 - Parameters: `id` (bookmark ID), `archived` (boolean: true to archive, false to unarchive)
@@ -455,6 +460,9 @@ mcp__readeck__readeck_list_bookmarks(archived=false, limit=10)
 
 Search bookmarks:
 mcp__readeck__readeck_search(query="python")
+
+Update bookmark tags:
+mcp__readeck__readeck_update_bookmark(id="abc123", tags=["tech", "ai", "tutorial"])
 
 Archive a bookmark:
 mcp__readeck__readeck_update_status(id="abc123", archived=true)
