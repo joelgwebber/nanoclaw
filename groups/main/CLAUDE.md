@@ -502,6 +502,11 @@ These are automatically configured when available.
 - Returns: Full article content with metadata (title, subtitle, author, date, engagement stats)
 - Automatically handles paid content if you're subscribed
 
+**mcp__substack__substack_remove_saved_article**
+- Remove an article from your Substack saved list
+- Parameters: `post_id` (required, post ID from saved articles list)
+- Use this to clean up your saved articles after archiving to Readeck
+
 ### Usage Examples
 
 ```
@@ -510,6 +515,9 @@ mcp__substack__substack_get_saved_articles(limit=50)
 
 Get full article content:
 mcp__substack__substack_get_article(subdomain="platformer", slug="the-article-slug")
+
+Remove article from saved list:
+mcp__substack__substack_remove_saved_article(post_id=187132686)
 ```
 
 ### Workflow: Moving Saved Articles to Readeck
@@ -518,8 +526,9 @@ A common workflow is to:
 1. List your saved Substack articles
 2. For each article, get the full content
 3. Save it to Readeck using `mcp__readeck__readeck_create_bookmark`
+4. Remove it from Substack saved list using `mcp__substack__substack_remove_saved_article`
 
-This allows you to archive your Substack reading list in your self-hosted bookmark manager.
+This allows you to archive your Substack reading list in your self-hosted bookmark manager and keep your Substack inbox clean.
 
 ---
 

@@ -326,6 +326,49 @@ server.tool(
   }
 );
 
+// Remove article from saved list
+server.tool(
+  'substack_remove_saved_article',
+  'Remove an article from your Substack saved list. Use the post ID from the saved articles list.',
+  {
+    post_id: z.number().int().describe('Post ID to remove from saved list'),
+  },
+  async (args) => {
+    try {
+      const url = 'https://substack.com/api/v1/posts/saved';
+      const headers = {
+        ...getCookieHeaders(),
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      };
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers,
+        body: JSON.stringify({ post_id: args.post_id }),
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication failed. Check SUBSTACK_SID and SUBSTACK_LLI environment variables.');
+      }
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Substack API error (${response.status}): ${text}`);
+      }
+
+      return {
+        content: [{ type: 'text' as const, text: `Successfully removed article ${args.post_id} from saved list.` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);
