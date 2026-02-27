@@ -22,12 +22,17 @@ interface ReadeckBookmark {
   id: string;
   url: string;
   title: string;
-  status: 'unread' | 'read' | 'archived';
+  is_archived: boolean;
   created_at: string;
   updated_at: string;
   excerpt?: string;
   tags?: string[];
   collection?: string;
+}
+
+// Helper to compute display status from bookmark fields
+function getStatus(bookmark: ReadeckBookmark): 'archived' | 'unread' {
+  return bookmark.is_archived ? 'archived' : 'unread';
 }
 
 async function apiRequest(
@@ -109,7 +114,7 @@ server.tool(
   {
     page: z.number().optional().describe('Page number (default: 1)'),
     limit: z.number().optional().describe('Items per page (default: 20)'),
-    status: z.enum(['unread', 'read', 'archived']).optional().describe('Filter by read status'),
+    archived: z.boolean().optional().describe('Filter by archived status (true=archived only, false=unarchived only, omit=all)'),
     search: z.string().optional().describe('Search query to filter bookmarks'),
   },
   async (args) => {
@@ -117,7 +122,7 @@ server.tool(
       const params = new URLSearchParams();
       if (args.page) params.append('page', args.page.toString());
       if (args.limit) params.append('limit', args.limit.toString());
-      if (args.status) params.append('status', args.status);
+      if (args.archived !== undefined) params.append('is_archived', args.archived.toString());
       if (args.search) params.append('search', args.search);
 
       const queryString = params.toString();
@@ -136,7 +141,7 @@ server.tool(
         .map((b: ReadeckBookmark) => {
           let line = `• [${b.id}] ${b.title || 'Untitled'}`;
           line += `\n  URL: ${b.url}`;
-          line += `\n  Status: ${b.status}`;
+          line += `\n  Status: ${getStatus(b)}`;
           if (b.excerpt) line += `\n  Excerpt: ${b.excerpt.slice(0, 100)}${b.excerpt.length > 100 ? '...' : ''}`;
           if (b.tags && b.tags.length > 0) line += `\n  Tags: ${b.tags.join(', ')}`;
           return line;
@@ -174,7 +179,7 @@ server.tool(
 
       let text = `Title: ${bookmark.title || 'Untitled'}\n`;
       text += `URL: ${bookmark.url}\n`;
-      text += `Status: ${bookmark.status}\n`;
+      text += `Status: ${getStatus(bookmark)}\n`;
       text += `ID: ${bookmark.id}\n`;
       text += `Created: ${bookmark.created_at}\n`;
       text += `Updated: ${bookmark.updated_at}\n`;
@@ -197,17 +202,17 @@ server.tool(
 // Update bookmark status
 server.tool(
   'readeck_update_status',
-  'Update the read status of a bookmark.',
+  'Update the archived status of a bookmark.',
   {
     id: z.string().describe('Bookmark ID'),
-    status: z.enum(['unread', 'read', 'archived']).describe('New status'),
+    archived: z.boolean().describe('Whether to archive (true) or unarchive (false) the bookmark'),
   },
   async (args) => {
     try {
-      await apiRequest(`/api/bookmarks/${args.id}/status`, 'PUT', { status: args.status });
+      await apiRequest(`/api/bookmarks/${args.id}`, 'PUT', { is_archived: args.archived });
 
       return {
-        content: [{ type: 'text' as const, text: `Bookmark ${args.id} marked as ${args.status}.` }],
+        content: [{ type: 'text' as const, text: `Bookmark ${args.id} ${args.archived ? 'archived' : 'unarchived'}.` }],
       };
     } catch (err) {
       return {

@@ -422,8 +422,8 @@ You have access to Readeck via MCP tools. Readeck is a self-hosted bookmark mana
 
 **mcp__readeck__readeck_list_bookmarks**
 - List bookmarks with filtering and pagination
-- Parameters: `page` (optional), `limit` (optional, default: 20), `status` (optional: unread/read/archived), `search` (optional)
-- Returns paginated results with total count
+- Parameters: `page` (optional), `limit` (optional, default: 20), `archived` (optional boolean: true=archived only, false=unarchived only), `search` (optional)
+- Returns list of matching bookmarks
 
 **mcp__readeck__readeck_get_bookmark**
 - Get full details of a specific bookmark
@@ -431,9 +431,9 @@ You have access to Readeck via MCP tools. Readeck is a self-hosted bookmark mana
 - Returns title, URL, status, excerpt, tags, collection, and timestamps
 
 **mcp__readeck__readeck_update_status**
-- Update the read status of a bookmark
-- Parameters: `id` (bookmark ID), `status` (unread/read/archived)
-- Mark items as read, unread, or archived
+- Update the archived status of a bookmark
+- Parameters: `id` (bookmark ID), `archived` (boolean: true to archive, false to unarchive)
+- Archive or unarchive bookmarks
 
 **mcp__readeck__readeck_delete_bookmark**
 - Delete a bookmark permanently
@@ -450,14 +450,14 @@ You have access to Readeck via MCP tools. Readeck is a self-hosted bookmark mana
 Save a bookmark:
 mcp__readeck__readeck_create_bookmark(url="https://example.com/article", tags=["tech", "tutorial"])
 
-List unread bookmarks:
-mcp__readeck__readeck_list_bookmarks(status="unread", limit=10)
+List unarchived bookmarks:
+mcp__readeck__readeck_list_bookmarks(archived=false, limit=10)
 
 Search bookmarks:
 mcp__readeck__readeck_search(query="python")
 
-Mark as read:
-mcp__readeck__readeck_update_status(id="abc123", status="read")
+Archive a bookmark:
+mcp__readeck__readeck_update_status(id="abc123", archived=true)
 
 Get bookmark details:
 mcp__readeck__readeck_get_bookmark(id="abc123")
