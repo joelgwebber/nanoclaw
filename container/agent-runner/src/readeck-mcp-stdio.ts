@@ -124,7 +124,7 @@ server.tool(
       const endpoint = queryString ? `/api/bookmarks?${queryString}` : '/api/bookmarks';
 
       const data = await apiRequest(endpoint);
-      const bookmarks = data.bookmarks || [];
+      const bookmarks = Array.isArray(data) ? data : [];
 
       if (bookmarks.length === 0) {
         return {
@@ -143,15 +143,13 @@ server.tool(
         })
         .join('\n\n');
 
-      const total = data.total || bookmarks.length;
       const currentPage = args.page || 1;
       const pageSize = args.limit || 20;
-      const totalPages = Math.ceil(total / pageSize);
 
       return {
         content: [{
           type: 'text' as const,
-          text: `Bookmarks (page ${currentPage} of ${totalPages}, ${total} total):\n\n${formatted}`
+          text: `Bookmarks (showing ${bookmarks.length}):\n\n${formatted}`
         }],
       };
     } catch (err) {
@@ -258,7 +256,7 @@ server.tool(
       if (args.limit) params.append('limit', args.limit.toString());
 
       const data = await apiRequest(`/api/bookmarks?${params.toString()}`);
-      const bookmarks = data.bookmarks || [];
+      const bookmarks = Array.isArray(data) ? data : [];
 
       if (bookmarks.length === 0) {
         return {
