@@ -492,7 +492,7 @@ These are automatically configured when available.
 
 **mcp__substack__substack_get_saved_articles**
 - Get all articles saved to your Substack reading list
-- Parameters: `pages` (optional, default: 1, each page ~20 items)
+- Parameters: `limit` (optional, default: 20, max: 100)
 - Returns: Title, author, publication, subdomain, slug, URL, engagement stats
 - Articles are sorted by publish date, newest first
 
@@ -506,7 +506,7 @@ These are automatically configured when available.
 
 ```
 Get your saved articles:
-mcp__substack__substack_get_saved_articles(pages=2)
+mcp__substack__substack_get_saved_articles(limit=50)
 
 Get full article content:
 mcp__substack__substack_get_article(subdomain="platformer", slug="the-article-slug")

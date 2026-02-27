@@ -159,64 +159,51 @@ server.tool(
   'substack_get_saved_articles',
   'Get articles saved to your Substack reading list. Returns title, author, publication, and URL for each saved article.',
   {
-    pages: z.number().int().min(1).max(10).optional().describe('Number of pages to fetch (each page ~20 items). Default 1.'),
+    limit: z.number().int().min(1).max(100).optional().describe('Number of articles to fetch (default: 20, max: 100)'),
   },
   async (args) => {
     try {
-      const pages = args.pages || 1;
+      const limit = args.limit || 20;
       const allItems: SubstackArticle[] = [];
-      let cursor: string | null = null;
 
-      for (let page = 0; page < pages; page++) {
-        const params = new URLSearchParams({
-          inboxType: 'inbox',
-          surface: 'inbox_saved',  // Key parameter for saved articles
-          limit: '20',
+      const params = new URLSearchParams({
+        inboxType: 'saved',
+        limit: String(limit),
+      });
+
+      const url = `https://substack.com/api/v1/reader/posts?${params}`;
+      const json = await apiRequest(url);
+
+      const posts = (json.posts || []) as Record<string, unknown>[];
+      const pubs = (json.publications || []) as Record<string, unknown>[];
+
+      // Build publication lookup
+      const pubMap = new Map<number, Record<string, unknown>>();
+      for (const pub of pubs) {
+        pubMap.set(pub.id as number, pub);
+      }
+
+      for (const post of posts) {
+        const pubId = post.publication_id as number;
+        const pub = pubMap.get(pubId);
+        const bylines = (post.publishedBylines || []) as Record<string, unknown>[];
+
+        allItems.push({
+          id: post.id as number,
+          title: (post.title as string) || '',
+          slug: (post.slug as string) || '',
+          subtitle: (post.subtitle as string) || '',
+          publishedAt: (post.post_date as string) || '',
+          canonicalUrl: (post.canonical_url as string) || '',
+          audience: (post.audience as string) || 'everyone',
+          publicationName: (pub?.name as string) || '',
+          publicationSubdomain: (pub?.subdomain as string) || '',
+          authorName: (bylines[0]?.name as string) || (pub?.author_name as string) || '',
+          likes: (post.reaction_count as number) || 0,
+          comments: (post.comment_count as number) || 0,
+          restacks: (post.restacks as number) || 0,
+          wordCount: post.wordcount as number | undefined,
         });
-        if (cursor) params.set('cursor', cursor);
-
-        const url = `https://substack.com/api/v1/inbox/top?${params}`;
-        const json = await apiRequest(url);
-
-        const postItems = (json.post_items || json.posts || []) as Record<string, unknown>[];
-        const pubs = (json.publications || []) as Record<string, unknown>[];
-
-        // Build publication lookup
-        const pubMap = new Map<number, Record<string, unknown>>();
-        for (const pub of pubs) {
-          pubMap.set(pub.id as number, pub);
-        }
-
-        for (const item of postItems) {
-          const post = (item.post || item) as Record<string, unknown>;
-          const pubId = post.publication_id as number;
-          let pub = post.publication as Record<string, unknown> | undefined;
-          if (!pub) pub = pubMap.get(pubId);
-
-          const bylines = (post.publishedBylines || []) as Record<string, unknown>[];
-
-          allItems.push({
-            id: post.id as number,
-            title: (post.title as string) || '',
-            slug: (post.slug as string) || '',
-            subtitle: (post.subtitle as string) || '',
-            publishedAt: (post.post_date as string) || '',
-            canonicalUrl: (post.canonical_url as string) || '',
-            audience: (post.audience as string) || 'everyone',
-            publicationName: (pub?.name as string) || '',
-            publicationSubdomain: (pub?.subdomain as string) || '',
-            authorName: (bylines[0]?.name as string) || (pub?.author_name as string) || '',
-            likes: (post.reaction_count as number) || 0,
-            comments: (post.comment_count as number) || 0,
-            restacks: (post.restacks as number) || 0,
-            wordCount: post.wordcount as number | undefined,
-          });
-        }
-
-        // Get next cursor for pagination
-        const nextCursor = json.cursor as string | undefined;
-        if (!nextCursor || postItems.length === 0) break;
-        cursor = nextCursor;
       }
 
       if (allItems.length === 0) {
