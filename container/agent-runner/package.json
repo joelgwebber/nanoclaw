@@ -16,7 +16,8 @@
     "imap": "^0.8.19",
     "nodemailer": "^6.9.16",
     "mailparser": "^3.7.1",
-    "fast-xml-parser": "^4.5.0"
+    "fast-xml-parser": "^4.5.0",
+    "cheerio": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",

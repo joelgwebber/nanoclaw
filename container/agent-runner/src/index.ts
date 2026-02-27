@@ -503,7 +503,7 @@ async function runQuery(
             args: [substackMcpPath],
             env: {
               SUBSTACK_SID: sdkEnv.SUBSTACK_SID,
-              SUBSTACK_LLI: sdkEnv.SUBSTACK_LLI,
+              SUBSTACK_LLI: sdkEnv.SUBSTACK_LLI || '1',
             },
           },
         } : {}),

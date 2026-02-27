@@ -78,31 +78,31 @@ function htmlToMarkdown(html: string): string {
   $('script, style').remove();
 
   // Convert common elements
-  $('h1').replaceWith((i, el) => `\n# ${$(el).text()}\n`);
-  $('h2').replaceWith((i, el) => `\n## ${$(el).text()}\n`);
-  $('h3').replaceWith((i, el) => `\n### ${$(el).text()}\n`);
-  $('h4').replaceWith((i, el) => `\n#### ${$(el).text()}\n`);
-  $('strong, b').replaceWith((i, el) => `**${$(el).text()}**`);
-  $('em, i').replaceWith((i, el) => `*${$(el).text()}*`);
-  $('a').replaceWith((i, el) => `[${$(el).text()}](${$(el).attr('href')})`);
-  $('code').replaceWith((i, el) => `\`${$(el).text()}\``);
-  $('p').replaceWith((i, el) => `\n${$(el).html()}\n`);
+  $('h1').replaceWith((_i: any, el: any) => `\n# ${$(el).text()}\n`);
+  $('h2').replaceWith((_i: any, el: any) => `\n## ${$(el).text()}\n`);
+  $('h3').replaceWith((_i: any, el: any) => `\n### ${$(el).text()}\n`);
+  $('h4').replaceWith((_i: any, el: any) => `\n#### ${$(el).text()}\n`);
+  $('strong, b').replaceWith((_i: any, el: any) => `**${$(el).text()}**`);
+  $('em, i').replaceWith((_i: any, el: any) => `*${$(el).text()}*`);
+  $('a').replaceWith((_i: any, el: any) => `[${$(el).text()}](${$(el).attr('href')})`);
+  $('code').replaceWith((_i: any, el: any) => `\`${$(el).text()}\``);
+  $('p').replaceWith((_i: any, el: any) => `\n${$(el).html()}\n`);
   $('br').replaceWith('\n');
   $('hr').replaceWith('\n---\n');
 
   // Lists
-  $('ul').replaceWith((i, el) => {
-    const items = $(el).find('li').map((_, li) => `- ${$(li).text()}`).get().join('\n');
+  $('ul').replaceWith((_i: any, el: any) => {
+    const items = $(el).find('li').map((_: any, li: any) => `- ${$(li).text()}`).get().join('\n');
     return `\n${items}\n`;
   });
-  $('ol').replaceWith((i, el) => {
-    const items = $(el).find('li').map((idx, li) => `${idx + 1}. ${$(li).text()}`).get().join('\n');
+  $('ol').replaceWith((_i: any, el: any) => {
+    const items = $(el).find('li').map((idx: any, li: any) => `${idx + 1}. ${$(li).text()}`).get().join('\n');
     return `\n${items}\n`;
   });
 
   // Blockquotes
-  $('blockquote').replaceWith((i, el) => {
-    const text = $(el).text().split('\n').map(line => `> ${line}`).join('\n');
+  $('blockquote').replaceWith((_i: any, el: any) => {
+    const text = $(el).text().split('\n').map((line: string) => `> ${line}`).join('\n');
     return `\n${text}\n`;
   });
 
