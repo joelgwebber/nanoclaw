@@ -468,6 +468,62 @@ mcp__readeck__readeck_delete_bookmark(id="abc123")
 
 ---
 
+## Background Agents and Task Tracking
+
+You can spawn background agents that run concurrently using the Task tool with `run_in_background=true`.
+
+When you launch a background task, the Task tool returns:
+- `agentId`: Unique identifier for the background agent
+- `output_file`: Path where the agent's output will be written
+
+### Checking Background Task Status
+
+Use the **TaskOutput** tool to retrieve results from background agents:
+
+```
+TaskOutput(task_id="a9a100f")
+```
+
+This returns the background agent's output, including:
+- Status (running, completed, failed)
+- Results and findings
+- Any errors encountered
+
+### Background Task Output Files
+
+Background task outputs are stored in `/workspace/group/tasks/` and persist across messages. You can also read them directly:
+
+```
+Read(/workspace/group/tasks/a9a100f.output)
+```
+
+### Example Workflow
+
+1. Launch a background task:
+   ```
+   Task(
+     subagent_type="general-purpose",
+     description="Analyze codebase",
+     prompt="Your task here...",
+     run_in_background=true
+   )
+   ```
+
+2. Get immediate response with agentId
+
+3. In a later message, check on it:
+   ```
+   TaskOutput(task_id="a9a100f")
+   ```
+
+### Available Tools
+
+- `Task`: Spawn subagents (foreground or background)
+- `TaskOutput`: Retrieve background task results
+- `TaskStop`: Stop a running background task
+
+---
+
 ## Scheduling for Other Groups
 
 When scheduling tasks for other groups, use the `target_group_jid` parameter with the group's JID from `registered_groups.json`:

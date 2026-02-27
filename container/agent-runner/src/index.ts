@@ -432,7 +432,7 @@ async function runQuery(
         'Bash',
         'Read', 'Write', 'Edit', 'Glob', 'Grep',
         'WebSearch', 'WebFetch',
-        'Task', 'TaskOutput', 'TaskStop',
+        'Task', 'TaskOutput', 'TaskStop',  // Background agent support
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
