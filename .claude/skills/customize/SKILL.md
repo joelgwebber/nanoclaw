@@ -51,8 +51,16 @@ Questions to ask:
 - Which groups should have access?
 
 Implementation:
-1. Add MCP server config to the container settings (see `src/container-runner.ts` for how MCP servers are mounted)
-2. Document available tools in `groups/CLAUDE.md`
+1. Create MCP server file in `container/agent-runner/src/{service}-mcp-stdio.ts`
+2. Update `container/agent-runner/src/index.ts`:
+   - Add server path variable (e.g., `const serviceMcpPath = path.join(__dirname, '{service}-mcp-stdio.js')`)
+   - Pass to `runQuery()` function
+   - Add to `mcpServers` configuration with environment variables
+   - Add `mcp__{service}__*` to `allowedTools`
+3. Add secrets to `src/container-runner.ts` `readSecrets()` function
+4. Document available tools in `groups/main/CLAUDE.md` (or relevant group)
+5. Run `./scripts/update-agent-source.sh` to sync source files
+6. Add credentials to `.env`
 
 ### Changing Assistant Behavior
 
@@ -88,15 +96,24 @@ Implementation:
 
 ## After Changes
 
-Always tell the user:
+**For host code changes** (src/, config):
 ```bash
-# Rebuild and restart
 npm run build
-# macOS:
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
-# Linux:
-# systemctl --user restart nanoclaw
+systemctl --user restart nanoclaw  # Linux
+launchctl kickstart -k gui/$(id -u)/com.nanoclaw  # macOS
+```
+
+**For agent runner changes** (container/agent-runner/src/):
+```bash
+./scripts/update-agent-source.sh
+systemctl --user restart nanoclaw  # Linux
+launchctl kickstart -k gui/$(id -u)/com.nanoclaw  # macOS
+```
+
+**For dependency changes** (package.json, system packages):
+```bash
+./container/build.sh
+systemctl --user restart nanoclaw
 ```
 
 ## Example Interaction
