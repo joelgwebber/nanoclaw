@@ -85,6 +85,38 @@ docker builder prune -af
 ./container/build.sh
 ```
 
+## Maintaining Add-* Skills
+
+**CRITICAL**: The `.claude/skills/add-*` skills are the canonical source of truth for how to reconstitute a functional NanoClaw stack. They must stay in sync with code changes.
+
+### When You Modify Integration Code
+
+If you change any MCP server implementation (e.g., `container/agent-runner/src/*-mcp-stdio.ts`):
+
+1. **Immediately update the corresponding add-* skill** in `.claude/skills/add-*/SKILL.md`
+2. Document new tools, API changes, dependencies, and troubleshooting
+3. Ensure the skill contains enough detail to recreate the integration from scratch
+
+### When You Add a New Integration
+
+**ALWAYS start with the skill first**, then implement:
+
+1. Create `.claude/skills/add-<integration>/SKILL.md` documenting the full implementation
+2. Implement the code following the skill's specification
+3. Update the skill if you discover anything during implementation
+
+**Never add bespoke code changes without a corresponding skill.** Orphaned integrations cannot be reconstituted and will be lost.
+
+### Skill Quality Standards
+
+Each add-* skill must include:
+- Complete MCP server implementation (or reference to existing file)
+- All wiring steps (index.ts, container-runner.ts, CLAUDE.md updates)
+- Environment variables and secrets
+- Deployment steps (build, sync, restart)
+- Troubleshooting section
+- Complete tool documentation with examples
+
 # Task tracking
 
 This project uses Yaks to track its own work. Every piece of work must be bracketed: `/yaks:shave` before coding, `/yaks:shorn` right after committing. The Yaks skill has the full workflow — follow it.
