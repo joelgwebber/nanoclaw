@@ -313,6 +313,24 @@ You have access to Seafile cloud storage at https://files.j15r.com via MCP tools
 - Search for files and directories
 - Parameters: `query`, `library_id` (optional)
 
+**mcp__seafile__seafile_create_share_link**
+- Create a shareable download link for a file
+- Parameters: `library_id`, `path`, `password` (optional), `expire_days` (optional)
+- Returns a URL that can be shared with others to download the file
+- Use this when you need to provide access to images, documents, or any binary files
+
+### When to Use Share Links vs. Reading Files
+
+**Use `seafile_read_file`** for:
+- Text files that can be displayed directly (txt, md, csv, code, etc.)
+- Files you need to process or analyze
+
+**Use `seafile_create_share_link`** for:
+- Images (png, jpg, gif, etc.) - user can click the link to view
+- Documents (pdf, docx, etc.)
+- Binary files or anything you want the user to download
+- When the user asks to "see" or "show" a file (e.g., "show me my insurance card")
+
 ### Usage Example
 
 ```
@@ -327,6 +345,12 @@ mcp__seafile__seafile_read_file(library_id="abc123", path="/Documents/notes.txt"
 
 Upload a file:
 mcp__seafile__seafile_upload_file(library_id="abc123", path="/Documents/report.md", content="# Report\n\nContent here...")
+
+Create a shareable link (e.g., for "show me my insurance card"):
+mcp__seafile__seafile_create_share_link(library_id="abc123", path="/Personal/insurance_card.png")
+
+Create a password-protected link that expires in 7 days:
+mcp__seafile__seafile_create_share_link(library_id="abc123", path="/Documents/confidential.pdf", password="secret123", expire_days=7)
 ```
 
 ---

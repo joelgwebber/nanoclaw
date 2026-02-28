@@ -381,5 +381,63 @@ server.tool(
   }
 );
 
+server.tool(
+  'seafile_create_share_link',
+  'Create a shareable download link for a file in Seafile. Returns a URL that can be shared with others.',
+  {
+    library_id: z.string().describe('The library/repository ID'),
+    path: z.string().describe('File path'),
+    password: z.string().optional().describe('Optional password to protect the link'),
+    expire_days: z.number().int().min(1).optional().describe('Number of days until link expires'),
+  },
+  async (args) => {
+    const payload: any = {
+      repo_id: args.library_id,
+      path: args.path,
+      permissions: {
+        can_edit: false,
+        can_download: true,
+      },
+    };
+
+    if (args.password) {
+      payload.password = args.password;
+    }
+
+    if (args.expire_days) {
+      payload.expire_days = args.expire_days;
+    }
+
+    const response = await seafileRequest(
+      '/api/v2.1/share-links/',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    const link = response.link || '';
+    const token = response.token || '';
+    const expirationDate = response.expire_date ? new Date(response.expire_date).toLocaleDateString() : 'Never';
+
+    let result = `Share link created for ${args.path}:\n\n`;
+    result += `🔗 ${link}\n\n`;
+    result += `Token: ${token}\n`;
+    result += `Expires: ${expirationDate}\n`;
+    if (args.password) {
+      result += `Password protected: Yes\n`;
+    }
+    result += `\nAnyone with this link can download the file.`;
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: result
+      }]
+    };
+  }
+);
+
 const transport = new StdioServerTransport();
 server.connect(transport);
