@@ -83,17 +83,26 @@ Present as a yes/no question with:
 
 ### Step 3: Create the Yak (if approved)
 
-If user approves, invoke `/yaks:create` with:
-- `--title "The proposed title"`
-- `--type [bug/feature/task]`
-- `--priority [p1/p2/p3]`
-- `--description "The full description including implementation notes"`
+If user approves, run the yaks.py script directly via Bash:
+
+```bash
+python3 /workspace/project/.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py create \
+  --title "The proposed title" \
+  --type [bug/feature/task] \
+  --priority [1/2/3] \
+  --description "The full description including implementation notes"
+```
+
+**Important**:
+- Priority must be a number (1, 2, or 3), not "p1", "p2", "p3"
+- 1 = highest priority, 3 = lowest
+- The command will output the created yak ID (e.g., "Created nanoclaw-a1b2")
 
 ### Step 4: Confirm Creation
 
 After creating, tell the user:
 ```
-Yak created! You can view it with /yaks:show [ID] or work on it later with /yaks:shave [ID].
+Yak created! (nanoclaw-XXXX) You can view it with the yaks tools or I can show it to you.
 ```
 
 ## Examples
@@ -126,7 +135,14 @@ Currently NanoClaw can only send text messages to WhatsApp. Adding image support
 Should I create a yak to track this?
 ```
 
-**If approved**: Run `/yaks:create --title "Add WhatsApp image sending support" --type feature --priority p2 --description "Currently NanoClaw can only send text messages..."`
+**If approved**: Run:
+```bash
+python3 /workspace/project/.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py create \
+  --title "Add WhatsApp image sending support" \
+  --type feature \
+  --priority 2 \
+  --description "Currently NanoClaw can only send text messages to WhatsApp. Adding image support would allow sharing diagrams, screenshots, and forwarding images from Seafile. Implementation: Modify src/channels/whatsapp.ts to support Buffer/base64, add sendImage() method, update router."
+```
 
 ### Example 2: Technical Debt
 
