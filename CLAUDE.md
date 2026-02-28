@@ -85,7 +85,7 @@ docker builder prune -af
 ./container/build.sh
 ```
 
-# Agent Instructions
+# Task tracking
 
-This project uses Yaks to track work. The Yaks skill (activated by the `.yaks/` directory) defines the required workflow — follow it.
+This project uses Yaks to track its own work. Every piece of work must be bracketed: `/yaks:shave` before coding, `/yaks:shorn` right after committing. The Yaks skill has the full workflow — follow it.
 
