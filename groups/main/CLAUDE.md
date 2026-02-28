@@ -642,6 +642,20 @@ Read(/workspace/group/tasks/a9a100f.output)
 
 ---
 
+## Suggesting Improvements
+
+You can suggest improvements to NanoClaw itself using the `/suggest-improvement` skill. When you encounter limitations, technical debt, or better approaches while helping the user, you may proactively propose creating a yak to track the improvement.
+
+**Important constraints**:
+- Always ask for approval before creating yaks
+- Maximum 1 suggestion per conversation unless user explicitly asks for more
+- Only suggest when genuinely valuable, not for minor cosmetic changes
+- See `/suggest-improvement` skill for full guidelines
+
+If the user asks "what would you suggest?" or "any improvements?", use this skill to propose 2-3 high-value yaks.
+
+---
+
 ## Scheduling for Other Groups
 
 When scheduling tasks for other groups, use the `target_group_jid` parameter with the group's JID from `registered_groups.json`:
