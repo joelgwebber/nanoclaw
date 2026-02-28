@@ -644,15 +644,33 @@ Read(/workspace/group/tasks/a9a100f.output)
 
 ## Suggesting Improvements
 
-You can suggest improvements to NanoClaw itself using the `/suggest-improvement` skill. When you encounter limitations, technical debt, or better approaches while helping the user, you may proactively propose creating a yak to track the improvement.
+When you encounter limitations, technical debt, or better approaches while helping the user, you can propose creating a yak (task) to track potential NanoClaw improvements.
+
+**How to suggest**:
+1. Identify the improvement (what, why, how)
+2. Ask user for approval to create a yak
+3. If approved, create it using:
+   ```bash
+   python3 /workspace/project/.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py create \
+     --title "Brief title" \
+     --type [bug/feature/task] \
+     --priority [1/2/3] \
+     --description "Full description with implementation notes"
+   ```
 
 **Important constraints**:
 - Always ask for approval before creating yaks
 - Maximum 1 suggestion per conversation unless user explicitly asks for more
 - Only suggest when genuinely valuable, not for minor cosmetic changes
-- See `/suggest-improvement` skill for full guidelines
+- Priority: 1=critical, 2=important, 3=nice-to-have
 
-If the user asks "what would you suggest?" or "any improvements?", use this skill to propose 2-3 high-value yaks.
+**Triggers for suggestions**:
+- You hit a limitation that prevents completing a task
+- You notice repeated technical debt while working
+- You identify clear performance issues
+- You discover a better implementation approach
+
+If the user asks "what would you suggest?" or "any improvements?", propose 2-3 high-value improvements with full context.
 
 ---
 
