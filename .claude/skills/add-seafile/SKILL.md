@@ -85,10 +85,13 @@ server.tool(
   },
   async (args) => {
     // POST to /api/v2.1/share-links/
-    // Returns shareable URL
+    // Returns shareable URL with ?dl=1 appended for direct download
+    const downloadLink = link ? `${link}?dl=1` : '';
   }
 );
 ```
+
+**Note**: The `?dl=1` parameter is automatically appended to share links to provide direct download access instead of showing a Seafile webpage. This ensures images and files can be viewed inline in messaging apps.
 
 The complete file implements all 9 tools with full error handling, TypeScript typing, and hybrid access logic.
 
