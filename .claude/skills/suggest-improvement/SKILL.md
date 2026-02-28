@@ -83,20 +83,25 @@ Present as a yes/no question with:
 
 ### Step 3: Create the Yak (if approved)
 
-If user approves, run the yaks.py script directly via Bash:
+If user approves, send an IPC message to the NanoClaw controller:
 
 ```bash
-python3 /workspace/project/.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py create \
-  --title "The proposed title" \
-  --type [bug/feature/task] \
-  --priority [1/2/3] \
-  --description "The full description including implementation notes"
+cat > /workspace/ipc/tasks/create_yak_$(date +%s).json <<'EOF'
+{
+  "type": "create_yak",
+  "title": "The proposed title",
+  "yak_type": "bug|feature|task",
+  "priority": 1,
+  "description": "The full description including implementation notes"
+}
+EOF
 ```
 
 **Important**:
 - Priority must be a number (1, 2, or 3), not "p1", "p2", "p3"
 - 1 = highest priority, 3 = lowest
-- The command will output the created yak ID (e.g., "Created nanoclaw-a1b2")
+- The controller will pick up the IPC message and create the yak on the host
+- Optional: Add `"parent": "nanoclaw-xxxx"` to create a child yak
 
 ### Step 4: Confirm Creation
 
@@ -135,13 +140,17 @@ Currently NanoClaw can only send text messages to WhatsApp. Adding image support
 Should I create a yak to track this?
 ```
 
-**If approved**: Run:
+**If approved**: Send IPC message:
 ```bash
-python3 /workspace/project/.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py create \
-  --title "Add WhatsApp image sending support" \
-  --type feature \
-  --priority 2 \
-  --description "Currently NanoClaw can only send text messages to WhatsApp. Adding image support would allow sharing diagrams, screenshots, and forwarding images from Seafile. Implementation: Modify src/channels/whatsapp.ts to support Buffer/base64, add sendImage() method, update router."
+cat > /workspace/ipc/tasks/create_yak_$(date +%s).json <<'EOF'
+{
+  "type": "create_yak",
+  "title": "Add WhatsApp image sending support",
+  "yak_type": "feature",
+  "priority": 2,
+  "description": "Currently NanoClaw can only send text messages to WhatsApp. Adding image support would allow sharing diagrams, screenshots, and forwarding images from Seafile. Implementation: Modify src/channels/whatsapp.ts to support Buffer/base64, add sendImage() method, update router."
+}
+EOF
 ```
 
 ### Example 2: Technical Debt

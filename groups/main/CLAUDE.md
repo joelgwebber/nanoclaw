@@ -649,14 +649,19 @@ When you encounter limitations, technical debt, or better approaches while helpi
 **How to suggest**:
 1. Identify the improvement (what, why, how)
 2. Ask user for approval to create a yak
-3. If approved, create it using:
+3. If approved, send an IPC message:
    ```bash
-   python3 /workspace/project/.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py create \
-     --title "Brief title" \
-     --type [bug/feature/task] \
-     --priority [1/2/3] \
-     --description "Full description with implementation notes"
+   cat > /workspace/ipc/tasks/create_yak_$(date +%s).json <<'EOF'
+   {
+     "type": "create_yak",
+     "title": "Brief title",
+     "yak_type": "bug|feature|task",
+     "priority": 1,
+     "description": "Full description with implementation notes"
+   }
+   EOF
    ```
+4. Tell the user the yak has been queued for creation
 
 **Important constraints**:
 - Always ask for approval before creating yaks

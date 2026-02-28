@@ -170,6 +170,12 @@ export async function processTaskIpc(
     trigger?: string;
     requiresTrigger?: boolean;
     containerConfig?: RegisteredGroup['containerConfig'];
+    // For create_yak
+    title?: string;
+    yak_type?: string;
+    priority?: number;
+    description?: string;
+    parent?: string;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -377,6 +383,61 @@ export async function processTaskIpc(
         logger.warn(
           { data },
           'Invalid register_group request - missing required fields',
+        );
+      }
+      break;
+
+    case 'create_yak':
+      // Only main group can create yaks
+      if (!isMain) {
+        logger.warn(
+          { sourceGroup },
+          'Unauthorized create_yak attempt blocked',
+        );
+        break;
+      }
+      if (data.title && data.yak_type && data.priority && data.description) {
+        try {
+          const { execSync } = await import('child_process');
+          const args = [
+            'create',
+            '--title',
+            data.title,
+            '--type',
+            data.yak_type,
+            '--priority',
+            data.priority.toString(),
+            '--description',
+            data.description,
+          ];
+          if (data.parent) {
+            args.push('--parent', data.parent);
+          }
+
+          const yakScript = path.join(
+            process.env.HOME || '',
+            '.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py',
+          );
+
+          const result = execSync(
+            `python3 "${yakScript}" ${args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`,
+            { encoding: 'utf-8' },
+          );
+
+          logger.info(
+            { sourceGroup, title: data.title, result: result.trim() },
+            'Yak created via IPC',
+          );
+        } catch (err) {
+          logger.error(
+            { err, sourceGroup, title: data.title },
+            'Error creating yak via IPC',
+          );
+        }
+      } else {
+        logger.warn(
+          { data },
+          'Invalid create_yak request - missing required fields (title, yak_type, priority, description)',
         );
       }
       break;
