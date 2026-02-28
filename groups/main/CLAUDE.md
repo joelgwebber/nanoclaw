@@ -454,6 +454,21 @@ You have access to Readeck via MCP tools. Readeck is a self-hosted bookmark mana
 - Parameters: `id` (bookmark ID)
 - Returns title, URL, status, excerpt, tags, collection, and timestamps
 
+**mcp__readeck__readeck_update_bookmark**
+- Update labels (tags) on an existing bookmark
+- Parameters: `id` (bookmark ID), `add_labels` (optional, comma-separated), `remove_labels` (optional, comma-separated)
+- Examples: `add_labels="tech,tutorial"`, `remove_labels="old,deprecated"`
+- Can add and remove labels in the same call
+
+**mcp__readeck__readeck_mark_favorite**
+- Mark or unmark a bookmark as favorite
+- Parameters: `id` (bookmark ID), `favorite` (boolean: true to mark, false to unmark)
+
+**mcp__readeck__readeck_update_read_progress**
+- Update reading progress for a bookmark
+- Parameters: `id` (bookmark ID), `progress` (integer 0-100, percentage of article read)
+- Use 100 to mark as fully read, 0 for unread
+
 **mcp__readeck__readeck_update_status**
 - Update the archived status of a bookmark
 - Parameters: `id` (bookmark ID), `archived` (boolean: true to archive, false to unarchive)
@@ -468,17 +483,34 @@ You have access to Readeck via MCP tools. Readeck is a self-hosted bookmark mana
 - Parameters: `query` (search string), `limit` (optional, default: 20)
 - Searches titles, content, and URLs
 
-### Important Notes
-
-**Tags are immutable** - Readeck's API does not support updating tags after bookmark creation. Tags can only be set when creating a bookmark with `readeck_create_bookmark`. If you need to change tags:
-1. Delete the bookmark with `readeck_delete_bookmark`
-2. Recreate it with `readeck_create_bookmark` using the new tags
+**mcp__readeck__readeck_list_labels**
+- Get list of existing labels for discovery/autocomplete
+- Parameters: `query` (optional search string to filter labels)
+- Useful for finding available labels before adding them to bookmarks
 
 ### Usage Examples
 
 ```
-Save a bookmark:
+Save a bookmark with tags:
 mcp__readeck__readeck_create_bookmark(url="https://example.com/article", tags=["tech", "tutorial"])
+
+List available labels:
+mcp__readeck__readeck_list_labels()
+mcp__readeck__readeck_list_labels(query="tech")
+
+Update bookmark labels:
+mcp__readeck__readeck_update_bookmark(id="abc123", add_labels="ai,machine-learning")
+mcp__readeck__readeck_update_bookmark(id="abc123", remove_labels="old")
+mcp__readeck__readeck_update_bookmark(id="abc123", add_labels="updated", remove_labels="draft")
+
+Mark as favorite:
+mcp__readeck__readeck_mark_favorite(id="abc123", favorite=true)
+
+Mark as read:
+mcp__readeck__readeck_update_read_progress(id="abc123", progress=100)
+
+Set reading progress to 50%:
+mcp__readeck__readeck_update_read_progress(id="abc123", progress=50)
 
 List unarchived bookmarks:
 mcp__readeck__readeck_list_bookmarks(archived=false, limit=10)

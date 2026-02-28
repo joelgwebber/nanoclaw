@@ -70,6 +70,42 @@ async function apiRequest(
   return await response.json();
 }
 
+async function formRequest(
+  endpoint: string,
+  method: 'POST' | 'PATCH',
+  formData: Record<string, string | number>
+): Promise<any> {
+  const url = `${BASE_URL}${endpoint}`;
+  const body = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(formData)) {
+    body.append(key, String(value));
+  }
+
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${READECK_API_KEY}`,
+    'Content-Type': 'application/x-www-form-urlencoded',
+  };
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body.toString(),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Readeck API error (${response.status}): ${errorText}`);
+  }
+
+  // May return empty response
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return {};
+  }
+
+  return await response.json();
+}
+
 const server = new McpServer({
   name: 'readeck',
   version: '1.0.0',
@@ -199,7 +235,96 @@ server.tool(
   }
 );
 
-// Update bookmark status
+// Update bookmark labels
+server.tool(
+  'readeck_update_bookmark',
+  'Update bookmark labels (tags). Add or remove specific labels from a bookmark.',
+  {
+    id: z.string().describe('Bookmark ID'),
+    add_labels: z.string().optional().describe('Comma-separated labels to add (e.g. "tech,tutorial,ai")'),
+    remove_labels: z.string().optional().describe('Comma-separated labels to remove (e.g. "old,deprecated")'),
+  },
+  async (args) => {
+    try {
+      if (!args.add_labels && !args.remove_labels) {
+        return {
+          content: [{ type: 'text' as const, text: 'No updates specified. Provide add_labels or remove_labels.' }],
+          isError: true,
+        };
+      }
+
+      const formData: Record<string, string> = {};
+      if (args.add_labels) formData.add_labels = args.add_labels;
+      if (args.remove_labels) formData.remove_labels = args.remove_labels;
+
+      await formRequest(`/api/bookmarks/${args.id}`, 'POST', formData);
+
+      const operations = [];
+      if (args.add_labels) operations.push(`added: ${args.add_labels}`);
+      if (args.remove_labels) operations.push(`removed: ${args.remove_labels}`);
+
+      return {
+        content: [{ type: 'text' as const, text: `Labels updated successfully (${operations.join(', ')}).` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Mark bookmark as favorite
+server.tool(
+  'readeck_mark_favorite',
+  'Mark or unmark a bookmark as favorite.',
+  {
+    id: z.string().describe('Bookmark ID'),
+    favorite: z.boolean().describe('Whether to mark as favorite (true) or unmark (false)'),
+  },
+  async (args) => {
+    try {
+      await formRequest(`/api/bookmarks/${args.id}`, 'PATCH', { is_marked: args.favorite ? 1 : 0 });
+
+      return {
+        content: [{ type: 'text' as const, text: `Bookmark ${args.favorite ? 'marked as favorite' : 'unmarked'}.` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Update read progress
+server.tool(
+  'readeck_update_read_progress',
+  'Update reading progress for a bookmark. Use 100 to mark as fully read, 0 for unread.',
+  {
+    id: z.string().describe('Bookmark ID'),
+    progress: z.number().int().min(0).max(100).describe('Reading progress percentage (0-100)'),
+  },
+  async (args) => {
+    try {
+      await formRequest(`/api/bookmarks/${args.id}`, 'PATCH', { read_progress: args.progress });
+
+      const status = args.progress === 100 ? 'marked as read' : args.progress === 0 ? 'marked as unread' : `progress set to ${args.progress}%`;
+      return {
+        content: [{ type: 'text' as const, text: `Bookmark ${status}.` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Update bookmark status (archive/unarchive)
 server.tool(
   'readeck_update_status',
   'Update the archived status of a bookmark.',
@@ -277,6 +402,43 @@ server.tool(
         content: [{
           type: 'text' as const,
           text: `Found ${bookmarks.length} bookmark(s) for "${args.query}":\n\n${formatted}`
+        }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Autocomplete labels
+server.tool(
+  'readeck_list_labels',
+  'Get list of existing labels (tags) for autocomplete/discovery. Useful for finding available labels before adding them to bookmarks.',
+  {
+    query: z.string().optional().describe('Optional search query to filter labels (e.g. "tech" to find "tech", "technology", etc.)'),
+  },
+  async (args) => {
+    try {
+      const params = new URLSearchParams({
+        type: 'label',
+        q: args.query ? `*${args.query}*` : '*',
+      });
+
+      const labels = await apiRequest(`/api/bookmarks/@complete?${params.toString()}`);
+
+      if (!Array.isArray(labels) || labels.length === 0) {
+        return {
+          content: [{ type: 'text' as const, text: args.query ? `No labels found matching "${args.query}".` : 'No labels found.' }],
+        };
+      }
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Available labels${args.query ? ` matching "${args.query}"` : ''}:\n${labels.join(', ')}`
         }],
       };
     } catch (err) {
