@@ -235,6 +235,163 @@ Should I create a yak to track this?
 - **p2**: Valuable features, important optimizations, significant debt
 - **p3**: Nice-to-haves, minor improvements, low-risk enhancements
 
+## Implementation
+
+This section documents how to implement the `create_yak` IPC handler so the feature can be reconstituted if needed.
+
+### Prerequisites
+
+- Yaks plugin installed: `~/.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/`
+- Yaks initialized in the NanoClaw project (`/yaks:init` or `.yaks/` directory exists)
+
+### Server-Side Implementation
+
+**File: `src/ipc.ts`**
+
+Add the `create_yak` case to the `processTaskIpc` function switch statement:
+
+```typescript
+case 'create_yak':
+  // Only main group can create yaks
+  if (!isMain) {
+    logger.warn(
+      { sourceGroup },
+      'Unauthorized create_yak attempt blocked',
+    );
+    break;
+  }
+  if (data.title && data.yak_type && data.priority && data.description) {
+    try {
+      const { execSync } = await import('child_process');
+      const args = [
+        'create',
+        '--title',
+        data.title,
+        '--type',
+        data.yak_type,
+        '--priority',
+        data.priority.toString(),
+        '--description',
+        data.description,
+      ];
+      if (data.parent) {
+        args.push('--parent', data.parent);
+      }
+
+      const yakScript = path.join(
+        process.env.HOME || '',
+        '.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py',
+      );
+
+      const result = execSync(
+        `python3 "${yakScript}" ${args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`,
+        { encoding: 'utf-8' },
+      );
+
+      logger.info(
+        { sourceGroup, title: data.title, result: result.trim() },
+        'Yak created via IPC',
+      );
+    } catch (err) {
+      logger.error(
+        { err, sourceGroup, title: data.title },
+        'Error creating yak via IPC',
+      );
+    }
+  } else {
+    logger.warn(
+      { data },
+      'Invalid create_yak request - missing required fields (title, yak_type, priority, description)',
+    );
+  }
+  break;
+```
+
+**Add to the processTaskIpc data interface** (around line 156):
+
+```typescript
+export async function processTaskIpc(
+  data: {
+    // ... existing fields ...
+    // For create_yak
+    title?: string;
+    yak_type?: string;
+    priority?: number;
+    description?: string;
+    parent?: string;
+  },
+  sourceGroup: string,
+  isMain: boolean,
+  deps: IpcDeps,
+): Promise<void> {
+```
+
+### Deployment
+
+1. **Build the TypeScript code**:
+   ```bash
+   npm run build
+   ```
+
+2. **Restart the service**:
+   ```bash
+   # macOS
+   launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+
+   # Linux
+   systemctl --user restart nanoclaw
+   ```
+
+3. **Verify IPC watcher started**:
+   ```bash
+   tail logs/nanoclaw.log | grep "IPC watcher started"
+   ```
+
+### Testing
+
+Create a test IPC message:
+
+```bash
+cat > data/ipc/main/tasks/create_yak_$(date +%s).json <<'EOF'
+{
+  "type": "create_yak",
+  "title": "Test yak creation",
+  "yak_type": "task",
+  "priority": 3,
+  "description": "Testing the IPC flow"
+}
+EOF
+```
+
+Check logs within 1 second (IPC poll interval):
+
+```bash
+tail -f logs/nanoclaw.log | grep "Yak created"
+```
+
+Should see: `Yak created via IPC: nanoclaw-XXXX`
+
+Verify yak was created:
+
+```bash
+/yaks:show nanoclaw-XXXX
+```
+
+### How It Works
+
+1. **Agent creates IPC file**: Writes JSON to `/workspace/ipc/tasks/create_yak_*.json` (mounted from `data/ipc/main/tasks/`)
+2. **Controller polls IPC directory**: Every 1 second (IPC_POLL_INTERVAL)
+3. **Controller processes message**: Reads JSON, validates fields, runs yaks.py on host
+4. **Yak created**: Controller executes python3 command with proper escaping
+5. **IPC file deleted**: Message consumed, file removed
+6. **Logged**: Success logged with yak ID or error logged if failed
+
+### Authorization
+
+- **Only main group** can create yaks (same pattern as `register_group`)
+- Non-main groups receive: "Unauthorized create_yak attempt blocked"
+- This prevents other groups from spamming the yak backlog
+
 ## Integration with CLAUDE.md
 
 Add this to `groups/main/CLAUDE.md` so Sparky knows about this capability:
@@ -242,15 +399,38 @@ Add this to `groups/main/CLAUDE.md` so Sparky knows about this capability:
 ```markdown
 ## Suggesting Improvements
 
-You can suggest improvements to NanoClaw itself using the `/suggest-improvement` skill. When you encounter limitations, technical debt, or better approaches while helping the user, you may proactively propose creating a yak to track the improvement.
+When you encounter limitations, technical debt, or better approaches while helping the user, you can propose creating a yak (task) to track potential NanoClaw improvements.
+
+**How to suggest**:
+1. Identify the improvement (what, why, how)
+2. Ask user for approval to create a yak
+3. If approved, send an IPC message:
+   ```bash
+   cat > /workspace/ipc/tasks/create_yak_$(date +%s).json <<'EOF'
+   {
+     "type": "create_yak",
+     "title": "Brief title",
+     "yak_type": "bug|feature|task",
+     "priority": 1,
+     "description": "Full description with implementation notes"
+   }
+   EOF
+   ```
+4. Tell the user the yak has been queued for creation
 
 **Important constraints**:
 - Always ask for approval before creating yaks
 - Maximum 1 suggestion per conversation unless user explicitly asks for more
 - Only suggest when genuinely valuable, not for minor cosmetic changes
-- See `/suggest-improvement` skill for full guidelines
+- Priority: 1=critical, 2=important, 3=nice-to-have
 
-If the user asks "what would you suggest?" or "any improvements?", use this skill to propose 2-3 high-value yaks.
+**Triggers for suggestions**:
+- You hit a limitation that prevents completing a task
+- You notice repeated technical debt while working
+- You identify clear performance issues
+- You discover a better implementation approach
+
+If the user asks "what would you suggest?" or "any improvements?", propose 2-3 high-value improvements with full context.
 ```
 
 ## Troubleshooting
@@ -270,13 +450,33 @@ If the user asks "what would you suggest?" or "any improvements?", use this skil
 - Require analysis of what/why/how before proposing
 - Review examples for specificity
 
+### "Yak not created after IPC message"
+- Check IPC watcher is running: `tail logs/nanoclaw.log | grep "IPC watcher started"`
+- Verify IPC file was consumed: `ls data/ipc/main/tasks/` (should be empty)
+- Check logs for errors: `tail logs/nanoclaw.log | grep -i "yak\|error"`
+- Verify yaks plugin installed: `ls ~/.claude/plugins/cache/yaks-marketplace/yaks/*/scripts/yak.py`
+- Check IPC message format (must have title, yak_type, priority, description)
+
+### "IPC permission denied or command not found"
+- Verify `python3` is in PATH: `which python3`
+- Check yaks.py script exists at expected path
+- Ensure HOME environment variable is set for the service
+- Review error logs: `tail logs/nanoclaw.log | grep -A 5 "Error creating yak"`
+
 ## Removal
 
 To remove this capability:
 
 1. Remove `.claude/skills/suggest-improvement/SKILL.md`
 2. Remove "Suggesting Improvements" section from `groups/main/CLAUDE.md`
-3. Optionally keep yaks created through this skill - they're just regular tasks
+3. Remove `create_yak` case from `src/ipc.ts` in the `processTaskIpc` switch statement
+4. Remove create_yak fields from the `processTaskIpc` data interface
+5. Rebuild and restart:
+   ```bash
+   npm run build
+   systemctl --user restart nanoclaw  # or launchctl kickstart for macOS
+   ```
+6. Optionally keep yaks created through this skill - they're just regular tasks
 
 ## References
 
