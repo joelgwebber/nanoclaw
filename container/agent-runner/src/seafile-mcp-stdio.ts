@@ -421,8 +421,11 @@ server.tool(
     const token = response.token || '';
     const expirationDate = response.expire_date ? new Date(response.expire_date).toLocaleDateString() : 'Never';
 
+    // Append ?dl=1 to get direct download link instead of share page
+    const downloadLink = link ? `${link}?dl=1` : '';
+
     let result = `Share link created for ${args.path}:\n\n`;
-    result += `🔗 ${link}\n\n`;
+    result += `🔗 ${downloadLink}\n\n`;
     result += `Token: ${token}\n`;
     result += `Expires: ${expirationDate}\n`;
     if (args.password) {
