@@ -65,12 +65,17 @@ interface ReadeckBookmark {
   id: string;
   url: string;
   title: string;
-  status: 'unread' | 'read' | 'archived';
+  is_archived: boolean;
   created_at: string;
   updated_at: string;
   excerpt?: string;
   tags?: string[];
   collection?: string;
+}
+
+// Helper to compute display status from bookmark fields
+function getStatus(bookmark: ReadeckBookmark): 'archived' | 'unread' {
+  return bookmark.is_archived ? 'archived' : 'unread';
 }
 
 async function apiRequest(
@@ -101,6 +106,42 @@ async function apiRequest(
   }
 
   // DELETE may return empty response
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return {};
+  }
+
+  return await response.json();
+}
+
+async function formRequest(
+  endpoint: string,
+  method: 'POST' | 'PATCH',
+  formData: Record<string, string | number>
+): Promise<any> {
+  const url = `${BASE_URL}${endpoint}`;
+  const body = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(formData)) {
+    body.append(key, String(value));
+  }
+
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${READECK_API_KEY}`,
+    'Content-Type': 'application/x-www-form-urlencoded',
+  };
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body.toString(),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Readeck API error (${response.status}): ${errorText}`);
+  }
+
+  // May return empty response
   if (response.status === 204 || response.headers.get('content-length') === '0') {
     return {};
   }
@@ -152,7 +193,7 @@ server.tool(
   {
     page: z.number().optional().describe('Page number (default: 1)'),
     limit: z.number().optional().describe('Items per page (default: 20)'),
-    status: z.enum(['unread', 'read', 'archived']).optional().describe('Filter by read status'),
+    archived: z.boolean().optional().describe('Filter by archived status (true=archived only, false=unarchived only, omit=all)'),
     search: z.string().optional().describe('Search query to filter bookmarks'),
   },
   async (args) => {
@@ -160,14 +201,14 @@ server.tool(
       const params = new URLSearchParams();
       if (args.page) params.append('page', args.page.toString());
       if (args.limit) params.append('limit', args.limit.toString());
-      if (args.status) params.append('status', args.status);
+      if (args.archived !== undefined) params.append('is_archived', args.archived.toString());
       if (args.search) params.append('search', args.search);
 
       const queryString = params.toString();
       const endpoint = queryString ? `/api/bookmarks?${queryString}` : '/api/bookmarks';
 
       const data = await apiRequest(endpoint);
-      const bookmarks = data.bookmarks || [];
+      const bookmarks = Array.isArray(data) ? data : [];
 
       if (bookmarks.length === 0) {
         return {
@@ -179,22 +220,20 @@ server.tool(
         .map((b: ReadeckBookmark) => {
           let line = `• [${b.id}] ${b.title || 'Untitled'}`;
           line += `\\n  URL: ${b.url}`;
-          line += `\\n  Status: ${b.status}`;
+          line += `\\n  Status: ${getStatus(b)}`;
           if (b.excerpt) line += `\\n  Excerpt: ${b.excerpt.slice(0, 100)}${b.excerpt.length > 100 ? '...' : ''}`;
           if (b.tags && b.tags.length > 0) line += `\\n  Tags: ${b.tags.join(', ')}`;
           return line;
         })
         .join('\\n\\n');
 
-      const total = data.total || bookmarks.length;
       const currentPage = args.page || 1;
       const pageSize = args.limit || 20;
-      const totalPages = Math.ceil(total / pageSize);
 
       return {
         content: [{
           type: 'text' as const,
-          text: `Bookmarks (page ${currentPage} of ${totalPages}, ${total} total):\\n\\n${formatted}`
+          text: `Bookmarks (showing ${bookmarks.length}):\\n\\n${formatted}`
         }],
       };
     } catch (err) {
@@ -219,7 +258,7 @@ server.tool(
 
       let text = `Title: ${bookmark.title || 'Untitled'}\\n`;
       text += `URL: ${bookmark.url}\\n`;
-      text += `Status: ${bookmark.status}\\n`;
+      text += `Status: ${getStatus(bookmark)}\\n`;
       text += `ID: ${bookmark.id}\\n`;
       text += `Created: ${bookmark.created_at}\\n`;
       text += `Updated: ${bookmark.updated_at}\\n`;
@@ -239,20 +278,141 @@ server.tool(
   }
 );
 
-// Update bookmark status
+// Update bookmark labels
 server.tool(
-  'readeck_update_status',
-  'Update the read status of a bookmark.',
+  'readeck_update_bookmark',
+  'Update bookmark labels (tags). Add or remove specific labels from a bookmark.',
   {
     id: z.string().describe('Bookmark ID'),
-    status: z.enum(['unread', 'read', 'archived']).describe('New status'),
+    add_labels: z.string().optional().describe('Comma-separated labels to add (e.g. "tech,tutorial,ai")'),
+    remove_labels: z.string().optional().describe('Comma-separated labels to remove (e.g. "old,deprecated")'),
   },
   async (args) => {
     try {
-      await apiRequest(`/api/bookmarks/${args.id}/status`, 'PUT', { status: args.status });
+      if (!args.add_labels && !args.remove_labels) {
+        return {
+          content: [{ type: 'text' as const, text: 'No updates specified. Provide add_labels or remove_labels.' }],
+          isError: true,
+        };
+      }
+
+      // Get current bookmark to see existing labels
+      const bookmark: ReadeckBookmark = await apiRequest(`/api/bookmarks/${args.id}`);
+      const currentLabels = new Set(bookmark.tags || []);
+
+      // Add new labels
+      if (args.add_labels) {
+        const toAdd = args.add_labels.split(',').map(l => l.trim()).filter(l => l);
+        toAdd.forEach(label => currentLabels.add(label));
+      }
+
+      // Remove labels
+      if (args.remove_labels) {
+        const toRemove = args.remove_labels.split(',').map(l => l.trim()).filter(l => l);
+        toRemove.forEach(label => currentLabels.delete(label));
+      }
+
+      // Build form data with repeated labels parameter
+      const finalLabels = Array.from(currentLabels);
+      const url = `${BASE_URL}/api/bookmarks/${args.id}`;
+      const body = new URLSearchParams();
+      finalLabels.forEach(label => body.append('labels', label));
+
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${READECK_API_KEY}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+
+      const response = await fetch(url, {
+        method: 'PATCH',
+        headers,
+        body: body.toString(),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Readeck API error (${response.status}): ${errorText}`);
+      }
+
+      const operations = [];
+      if (args.add_labels) operations.push(`added: ${args.add_labels}`);
+      if (args.remove_labels) operations.push(`removed: ${args.remove_labels}`);
 
       return {
-        content: [{ type: 'text' as const, text: `Bookmark ${args.id} marked as ${args.status}.` }],
+        content: [{ type: 'text' as const, text: `Labels updated successfully (${operations.join(', ')}). Current labels: ${finalLabels.join(', ')}` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Mark bookmark as favorite
+server.tool(
+  'readeck_mark_favorite',
+  'Mark or unmark a bookmark as favorite.',
+  {
+    id: z.string().describe('Bookmark ID'),
+    favorite: z.boolean().describe('Whether to mark as favorite (true) or unmark (false)'),
+  },
+  async (args) => {
+    try {
+      await formRequest(`/api/bookmarks/${args.id}`, 'PATCH', { is_marked: args.favorite ? 1 : 0 });
+
+      return {
+        content: [{ type: 'text' as const, text: `Bookmark ${args.favorite ? 'marked as favorite' : 'unmarked'}.` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Update read progress
+server.tool(
+  'readeck_update_read_progress',
+  'Update reading progress for a bookmark. Use 100 to mark as fully read, 0 for unread.',
+  {
+    id: z.string().describe('Bookmark ID'),
+    progress: z.number().int().min(0).max(100).describe('Reading progress percentage (0-100)'),
+  },
+  async (args) => {
+    try {
+      await formRequest(`/api/bookmarks/${args.id}`, 'PATCH', { read_progress: args.progress });
+
+      const status = args.progress === 100 ? 'marked as read' : args.progress === 0 ? 'marked as unread' : `progress set to ${args.progress}%`;
+      return {
+        content: [{ type: 'text' as const, text: `Bookmark ${status}.` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Update bookmark status (archive/unarchive)
+server.tool(
+  'readeck_update_status',
+  'Update the archived status of a bookmark.',
+  {
+    id: z.string().describe('Bookmark ID'),
+    archived: z.boolean().describe('Whether to archive (true) or unarchive (false) the bookmark'),
+  },
+  async (args) => {
+    try {
+      await apiRequest(`/api/bookmarks/${args.id}`, 'PUT', { is_archived: args.archived });
+
+      return {
+        content: [{ type: 'text' as const, text: `Bookmark ${args.id} ${args.archived ? 'archived' : 'unarchived'}.` }],
       };
     } catch (err) {
       return {
@@ -301,7 +461,7 @@ server.tool(
       if (args.limit) params.append('limit', args.limit.toString());
 
       const data = await apiRequest(`/api/bookmarks?${params.toString()}`);
-      const bookmarks = data.bookmarks || [];
+      const bookmarks = Array.isArray(data) ? data : [];
 
       if (bookmarks.length === 0) {
         return {
@@ -317,6 +477,43 @@ server.tool(
         content: [{
           type: 'text' as const,
           text: `Found ${bookmarks.length} bookmark(s) for "${args.query}":\\n\\n${formatted}`
+        }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Autocomplete labels
+server.tool(
+  'readeck_list_labels',
+  'Get list of existing labels (tags) for autocomplete/discovery. Useful for finding available labels before adding them to bookmarks.',
+  {
+    query: z.string().optional().describe('Optional search query to filter labels (e.g. "tech" to find "tech", "technology", etc.)'),
+  },
+  async (args) => {
+    try {
+      const params = new URLSearchParams({
+        type: 'label',
+        q: args.query ? `*${args.query}*` : '*',
+      });
+
+      const labels = await apiRequest(`/api/bookmarks/@complete?${params.toString()}`);
+
+      if (!Array.isArray(labels) || labels.length === 0) {
+        return {
+          content: [{ type: 'text' as const, text: args.query ? `No labels found matching "${args.query}".` : 'No labels found.' }],
+        };
+      }
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Available labels${args.query ? ` matching "${args.query}"` : ''}:\\n${labels.join(', ')}`
         }],
       };
     } catch (err) {
@@ -424,7 +621,7 @@ READECK_API_KEY="your-api-key-here"
 
 Modify `src/container-runner.ts`:
 
-In the `readSecrets()` function (around line 95), add `'READECK_URL'` and `'READECK_API_KEY'` to the array:
+In the `readSecrets()` function (around line 216), add `'READECK_URL'` and `'READECK_API_KEY'` to the array:
 
 ```typescript
 function readSecrets(): Record<string, string> {
@@ -462,18 +659,33 @@ You have access to Readeck via MCP tools. Readeck is a self-hosted bookmark mana
 
 **mcp__readeck__readeck_list_bookmarks**
 - List bookmarks with filtering and pagination
-- Parameters: `page` (optional), `limit` (optional, default: 20), `status` (optional: unread/read/archived), `search` (optional)
-- Returns paginated results with total count
+- Parameters: `page` (optional), `limit` (optional, default: 20), `archived` (optional boolean: true=archived only, false=unarchived only), `search` (optional)
+- Returns list of matching bookmarks
 
 **mcp__readeck__readeck_get_bookmark**
 - Get full details of a specific bookmark
 - Parameters: `id` (bookmark ID)
 - Returns title, URL, status, excerpt, tags, collection, and timestamps
 
+**mcp__readeck__readeck_update_bookmark**
+- Update labels (tags) on an existing bookmark
+- Parameters: `id` (bookmark ID), `add_labels` (optional, comma-separated), `remove_labels` (optional, comma-separated)
+- Examples: `add_labels="tech,tutorial"`, `remove_labels="old,deprecated"`
+- Can add and remove labels in the same call
+
+**mcp__readeck__readeck_mark_favorite**
+- Mark or unmark a bookmark as favorite
+- Parameters: `id` (bookmark ID), `favorite` (boolean: true to mark, false to unmark)
+
+**mcp__readeck__readeck_update_read_progress**
+- Update reading progress for a bookmark
+- Parameters: `id` (bookmark ID), `progress` (integer 0-100, percentage of article read)
+- Use 100 to mark as fully read, 0 for unread
+
 **mcp__readeck__readeck_update_status**
-- Update the read status of a bookmark
-- Parameters: `id` (bookmark ID), `status` (unread/read/archived)
-- Mark items as read, unread, or archived
+- Update the archived status of a bookmark
+- Parameters: `id` (bookmark ID), `archived` (boolean: true to archive, false to unarchive)
+- Archive or unarchive bookmarks
 
 **mcp__readeck__readeck_delete_bookmark**
 - Delete a bookmark permanently
@@ -484,20 +696,43 @@ You have access to Readeck via MCP tools. Readeck is a self-hosted bookmark mana
 - Parameters: `query` (search string), `limit` (optional, default: 20)
 - Searches titles, content, and URLs
 
+**mcp__readeck__readeck_list_labels**
+- Get list of existing labels for discovery/autocomplete
+- Parameters: `query` (optional search string to filter labels)
+- Useful for finding available labels before adding them to bookmarks
+
 ### Usage Examples
 
 ```
-Save a bookmark:
+Save a bookmark with tags:
 mcp__readeck__readeck_create_bookmark(url="https://example.com/article", tags=["tech", "tutorial"])
 
-List unread bookmarks:
-mcp__readeck__readeck_list_bookmarks(status="unread", limit=10)
+List available labels:
+mcp__readeck__readeck_list_labels()
+mcp__readeck__readeck_list_labels(query="tech")
+
+Update bookmark labels:
+mcp__readeck__readeck_update_bookmark(id="abc123", add_labels="ai,machine-learning")
+mcp__readeck__readeck_update_bookmark(id="abc123", remove_labels="old")
+mcp__readeck__readeck_update_bookmark(id="abc123", add_labels="updated", remove_labels="draft")
+
+Mark as favorite:
+mcp__readeck__readeck_mark_favorite(id="abc123", favorite=true)
+
+Mark as read:
+mcp__readeck__readeck_update_read_progress(id="abc123", progress=100)
+
+Set reading progress to 50%:
+mcp__readeck__readeck_update_read_progress(id="abc123", progress=50)
+
+List unarchived bookmarks:
+mcp__readeck__readeck_list_bookmarks(archived=false, limit=10)
 
 Search bookmarks:
 mcp__readeck__readeck_search(query="python")
 
-Mark as read:
-mcp__readeck__readeck_update_status(id="abc123", status="read")
+Archive a bookmark:
+mcp__readeck__readeck_update_status(id="abc123", archived=true)
 
 Get bookmark details:
 mcp__readeck__readeck_get_bookmark(id="abc123")
@@ -590,6 +825,10 @@ The API key is invalid or expired. Generate a new token in Readeck (Profile → 
 
 The bookmark ID doesn't exist, or the Readeck instance URL is incorrect.
 
+### "Readeck API error (405)"
+
+You may be using an outdated version of the MCP server. The label update tool requires PATCH with form-encoded data and repeated `labels` parameters.
+
 ### "Readeck API error (422)"
 
 Invalid URL or malformed request body. Check that URLs are properly formatted.
@@ -628,8 +867,8 @@ To remove Readeck integration:
 - **Main channel only** — Readeck tools are only available in the main channel for security reasons (same pattern as other integrations)
 - **No real-time sync** — Changes made directly in Readeck won't trigger notifications. The agent only interacts with Readeck when you ask it to.
 - **No full content retrieval** — The MCP server retrieves metadata and excerpts, but not the full parsed article content. For full article text, you'd need to visit Readeck directly.
-- **No tag/collection management** — Currently can't create or manage tags/collections, only assign existing ones when creating bookmarks
 - **No offline support** — Requires internet connection to access your Readeck instance
+- **Form-encoded label updates** — The label update API uses form-encoded PATCH with repeated `labels` parameters, discovered through browser DevTools inspection. This is specific to Readeck's implementation.
 
 ## References
 
