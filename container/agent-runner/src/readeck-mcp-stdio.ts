@@ -253,18 +253,50 @@ server.tool(
         };
       }
 
-      const formData: Record<string, string> = {};
-      if (args.add_labels) formData.add_labels = args.add_labels;
-      if (args.remove_labels) formData.remove_labels = args.remove_labels;
+      // Get current bookmark to see existing labels
+      const bookmark: ReadeckBookmark = await apiRequest(`/api/bookmarks/${args.id}`);
+      const currentLabels = new Set(bookmark.tags || []);
 
-      await formRequest(`/api/bookmarks/${args.id}`, 'POST', formData);
+      // Add new labels
+      if (args.add_labels) {
+        const toAdd = args.add_labels.split(',').map(l => l.trim()).filter(l => l);
+        toAdd.forEach(label => currentLabels.add(label));
+      }
+
+      // Remove labels
+      if (args.remove_labels) {
+        const toRemove = args.remove_labels.split(',').map(l => l.trim()).filter(l => l);
+        toRemove.forEach(label => currentLabels.delete(label));
+      }
+
+      // Build form data with repeated labels parameter
+      const finalLabels = Array.from(currentLabels);
+      const url = `${BASE_URL}/api/bookmarks/${args.id}`;
+      const body = new URLSearchParams();
+      finalLabels.forEach(label => body.append('labels', label));
+
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${READECK_API_KEY}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+
+      const response = await fetch(url, {
+        method: 'PATCH',
+        headers,
+        body: body.toString(),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Readeck API error (${response.status}): ${errorText}`);
+      }
 
       const operations = [];
       if (args.add_labels) operations.push(`added: ${args.add_labels}`);
       if (args.remove_labels) operations.push(`removed: ${args.remove_labels}`);
 
       return {
-        content: [{ type: 'text' as const, text: `Labels updated successfully (${operations.join(', ')}).` }],
+        content: [{ type: 'text' as const, text: `Labels updated successfully (${operations.join(', ')}). Current labels: ${finalLabels.join(', ')}` }],
       };
     } catch (err) {
       return {
