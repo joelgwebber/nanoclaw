@@ -91,11 +91,28 @@ docker builder prune -af
 
 ### When You Modify Integration Code
 
-If you change any MCP server implementation (e.g., `container/agent-runner/src/*-mcp-stdio.ts`):
+**WORKFLOW**: Follow this sequence for ALL integration changes:
 
-1. **Immediately update the corresponding add-* skill** in `.claude/skills/add-*/SKILL.md`
-2. Document new tools, API changes, dependencies, and troubleshooting
-3. Ensure the skill contains enough detail to recreate the integration from scratch
+1. **BEFORE coding**: Read the corresponding add-* skill to understand current state
+2. **DURING coding**: Keep notes of what changed (tools, APIs, dependencies, config)
+3. **AFTER testing**: Update the skill BEFORE committing:
+   - [ ] Update `SKILL.md` description, phases, and verification steps
+   - [ ] Update `modify/` reference files (show the actual code changes)
+   - [ ] Update `modify/*.intent.md` files if architectural changes
+   - [ ] Update `manifest.yaml` version if breaking changes
+   - [ ] Test that skill documentation matches your implementation
+4. **COMMIT**: Include skill updates in same commit as code changes
+
+**Auto-Check Trigger Patterns** - You MUST update the add-* skill if you modify:
+
+- `container/agent-runner/src/*-mcp-stdio.ts` → Update tool documentation in SKILL.md and modify/
+- `src/*-ipc.ts` → Update IPC integration docs and modify/src/*.intent.md
+- `groups/main/CLAUDE.md` tool descriptions → Update modify/groups/main/CLAUDE.md
+- Environment variables or secrets → Update skill setup instructions
+- Dependencies (package.json, apt packages) → Update skill installation steps
+- Build/deployment steps → Update skill deployment phase
+
+**Why This Matters**: Skills are reconstitution instructions. If the skill is outdated, users can't rebuild the integration from scratch.
 
 ### When You Add a New Integration
 

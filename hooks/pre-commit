@@ -1,0 +1,82 @@
+#!/bin/bash
+# Pre-commit hook to ensure add-* skills stay in sync with integration code
+#
+# To install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+# Get list of files being committed
+changed_files=$(git diff --cached --name-only)
+
+# Track if we found any issues
+found_issues=false
+
+# Map integration files to their corresponding skills
+# Format: "file_pattern:skill_path:description"
+declare -a mappings=(
+  "container/agent-runner/src/workflowy-mcp-stdio.ts:.claude/skills/add-workflowy:WorkFlowy MCP server"
+  "container/agent-runner/src/readeck-mcp-stdio.ts:.claude/skills/add-readeck:Readeck MCP server"
+  "container/agent-runner/src/ipc-mcp-stdio.ts:.claude/skills/add-yak-shaving:Yak IPC MCP tools"
+  "container/agent-runner/src/seafile-mcp-stdio.ts:.claude/skills/add-seafile:Seafile MCP server"
+  "container/agent-runner/src/substack-mcp-stdio.ts:.claude/skills/add-substack:Substack MCP server"
+  "container/agent-runner/src/fastmail-mcp-stdio.ts:.claude/skills/add-fastmail:Fastmail MCP server"
+  "container/agent-runner/src/gmail-mcp-stdio.ts:.claude/skills/add-gmail:Gmail MCP server"
+  "src/yak-ipc.ts:.claude/skills/add-yak-shaving:Yak IPC handler"
+  "src/channels/whatsapp.ts:.claude/skills/setup:WhatsApp channel"
+  "src/channels/telegram.ts:.claude/skills/add-telegram:Telegram channel"
+  "src/channels/slack.ts:.claude/skills/add-slack:Slack channel"
+)
+
+# Check each mapping
+for mapping in "${mappings[@]}"; do
+  IFS=':' read -r file_pattern skill_path description <<< "$mapping"
+
+  # Check if the integration file changed
+  if echo "$changed_files" | grep -q "^$file_pattern$"; then
+    # Check if the corresponding skill also changed
+    if ! echo "$changed_files" | grep -q "^$skill_path/"; then
+      if [ "$found_issues" = false ]; then
+        echo ""
+        echo "⚠️  SKILL SYNC WARNING ⚠️"
+        echo ""
+        found_issues=true
+      fi
+
+      echo "  Modified: $file_pattern"
+      echo "  → Consider updating: $skill_path/"
+      echo "    ($description)"
+      echo ""
+    fi
+  fi
+done
+
+# Check if groups/main/CLAUDE.md changed without skill updates
+if echo "$changed_files" | grep -q "^groups/main/CLAUDE.md$"; then
+  # Check if any skill's modify/groups/main/CLAUDE.md also changed
+  if ! echo "$changed_files" | grep -q ".claude/skills/.*/modify/groups/main/CLAUDE.md"; then
+    if [ "$found_issues" = false ]; then
+      echo ""
+      echo "⚠️  SKILL SYNC WARNING ⚠️"
+      echo ""
+      found_issues=true
+    fi
+
+    echo "  Modified: groups/main/CLAUDE.md"
+    echo "  → Consider updating: .claude/skills/add-*/modify/groups/main/CLAUDE.md"
+    echo "    (Tool documentation may need sync)"
+    echo ""
+  fi
+fi
+
+# Show reminder if issues found
+if [ "$found_issues" = true ]; then
+  echo "  Reminder: Skills are reconstitution instructions."
+  echo "  If your code changes affect how to install/configure the integration,"
+  echo "  update the corresponding skill's SKILL.md and modify/ directory."
+  echo ""
+  echo "  To proceed anyway: git commit --no-verify"
+  echo ""
+
+  # Don't block commit, just warn
+  # exit 1  # Uncomment to block commits
+fi
+
+exit 0
