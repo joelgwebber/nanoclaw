@@ -747,15 +747,51 @@ Yak created! (nanoclaw-XXXX) You can view it with the yaks tools or I can show i
 
 ### Available Yak Tools
 
+**mcp__nanoclaw__create_yak**
+- Create a new yak (main group only)
+- Parameters: `title`, `yak_type` (bug/feature/task), `priority` (1-3), `description`, `parent` (optional)
+- Returns yak ID upon success
+
 **mcp__nanoclaw__list_yaks**
 - List yaks filtered by status
 - Parameters: `status` (optional: "hairy", "shearing", "shorn", "all", default: "hairy")
 - Returns formatted list of yaks with ID, title, type, priority, and status
 
-**mcp__nanoclaw__create_yak**
-- Create a new yak (main group only)
-- Parameters: `title`, `yak_type` (bug/feature/task), `priority` (1-3), `description`, `parent` (optional)
-- Returns yak ID upon success
+**mcp__nanoclaw__show_yak**
+- Get full details of a specific yak
+- Parameters: `yak_id` (required)
+- Returns: ID, title, type, priority, status, timestamps, description, parent, children, dependencies
+
+**mcp__nanoclaw__update_yak**
+- Update a yak's metadata (main group only)
+- Parameters: `yak_id` (required), `title` (optional), `yak_type` (optional), `priority` (optional), `description` (optional)
+- At least one optional field must be provided
+- Returns success confirmation
+
+**mcp__nanoclaw__shave_yak**
+- Start working on a yak (hairy → shearing) (main group only)
+- Parameters: `yak_id` (required)
+- Use when beginning work on a yak
+- Returns success confirmation
+
+**mcp__nanoclaw__shorn_yak**
+- Mark a yak as completed (shearing → shorn) (main group only)
+- Parameters: `yak_id` (required)
+- Use when finishing work on a yak
+- Returns success confirmation
+
+**mcp__nanoclaw__regrow_yak**
+- Reopen a completed yak (shorn → hairy) (main group only)
+- Parameters: `yak_id` (required)
+- Use when a completed yak needs to be reopened
+- Returns success confirmation
+
+**mcp__nanoclaw__dep_yak**
+- Manage yak dependencies (main group only)
+- Parameters: `yak_id` (required), `dep_action` ("add" or "remove"), `dep_id` (required)
+- `yak_id` depends on `dep_id` (yak_id is blocked by dep_id)
+- Use to track yak relationships and blocking dependencies
+- Returns success confirmation
 
 ---
 

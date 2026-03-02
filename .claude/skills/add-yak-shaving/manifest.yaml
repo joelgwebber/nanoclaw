@@ -1,8 +1,9 @@
 skill: yak-shaving
-version: 1.0.0
-description: "Agent-created yaks via IPC with introspection capabilities"
+version: 2.0.0
+description: "Full yak workflow management via MCP tools - create, list, show, update, shave, shorn, regrow, and manage dependencies"
 core_version: 0.1.0
-adds: []
+adds:
+  - src/yak-ipc.ts
 modifies:
   - src/ipc.ts
   - container/agent-runner/src/ipc-mcp-stdio.ts

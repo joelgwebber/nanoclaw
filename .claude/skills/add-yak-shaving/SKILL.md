@@ -5,10 +5,21 @@ description: Enable agents to create and query yaks via IPC for self-improvement
 
 # Add Yak Shaving Capability
 
-This skill enables Sparky (the main channel agent) to suggest improvements to NanoClaw by creating yaks (tasks) via MCP tools. It provides:
-- **mcp__nanoclaw__create_yak**: Agent-initiated yak creation with approval workflow
+This skill enables Sparky (the main channel agent) to manage yaks (tasks) for tracking NanoClaw improvements via MCP tools. It provides full yak workflow support:
+
+**Yak Management Tools**:
+- **mcp__nanoclaw__create_yak**: Create new yaks with approval workflow
 - **mcp__nanoclaw__list_yaks**: Query existing yaks to avoid duplicates
-- **IPC backend**: Tools write IPC requests, poll for responses, return results seamlessly
+- **mcp__nanoclaw__show_yak**: Get full details of a specific yak
+- **mcp__nanoclaw__update_yak**: Modify yak metadata (title, type, priority, description)
+
+**Yak Workflow Tools**:
+- **mcp__nanoclaw__shave_yak**: Start working (hairy → shearing)
+- **mcp__nanoclaw__shorn_yak**: Mark complete (shearing → shorn)
+- **mcp__nanoclaw__regrow_yak**: Reopen (shorn → hairy)
+- **mcp__nanoclaw__dep_yak**: Manage dependencies (add/remove)
+
+**Architecture**: MCP tools write IPC requests to `data/ipc/main/tasks/`, backend handlers in `src/yak-ipc.ts` execute yak.py commands, responses written to `data/ipc/main/responses/`, MCP tools poll and return results seamlessly.
 
 ## Phase 1: Pre-flight
 
@@ -17,7 +28,8 @@ This skill enables Sparky (the main channel agent) to suggest improvements to Na
 Check if yak-shaving is already configured:
 
 ```bash
-grep -q "create_yak" src/ipc.ts && echo "IPC handlers integrated" || echo "IPC handlers not integrated"
+test -f src/yak-ipc.ts && echo "Yak IPC handlers exist" || echo "Yak IPC handlers missing"
+grep -q "handleYakIpc" src/ipc.ts && echo "IPC dispatcher integrated" || echo "IPC dispatcher not integrated"
 grep -q "'create_yak'" container/agent-runner/src/ipc-mcp-stdio.ts && echo "MCP tools integrated" || echo "MCP tools not integrated"
 grep -q "## Suggesting Improvements" groups/main/CLAUDE.md && echo "Guidance added" || echo "Guidance not added"
 ```
@@ -36,48 +48,86 @@ If not installed, run `/yaks:init` or install the Yaks plugin first.
 
 ## Phase 2: Apply Code Changes
 
-### 1. Modify src/ipc.ts
+### 1. Create src/yak-ipc.ts
 
-Apply changes from `modify/src/ipc.ts`:
+Create new file `src/yak-ipc.ts` with dedicated yak handlers:
 
-**Interface update** (around line 173-181):
-- Add `title?`, `yak_type?`, `priority?`, `description?`, `parent?` fields
-- Add `status?` field for list_yaks
+**Exports**:
+- `handleYakIpc(data, sourceGroup, isMain)` - Dispatcher for all yak operations
+- `YakIpcData` interface - Type definition for yak IPC data
 
-**Add create_yak handler** (after register_group case):
-- Authorization: Only main group (`if (!isMain)`)
-- Executes `yak.py create` on host
-- Writes response to `data/ipc/{sourceGroup}/responses/yak_{timestamp}.json`
-- Returns `{success: true, yak_id, ...}` or `{success: false, error, ...}`
+**Handlers** (see `modify/src/yak-ipc.ts` for reference implementation):
+- `handleCreateYak` - Create yaks (main-only)
+- `handleListYaks` - List yaks by status
+- `handleShowYak` - Get yak details
+- `handleUpdateYak` - Update yak metadata (main-only)
+- `handleShaveYak` - Start shaving (main-only)
+- `handleShornYak` - Mark complete (main-only)
+- `handleRegrowYak` - Reopen (main-only)
+- `handleDepYak` - Manage dependencies (main-only)
 
-**Add list_yaks handler** (after create_yak case):
-- Executes `yak.py list --json --status {status}`
-- Writes response to `data/ipc/{sourceGroup}/responses/list_yaks_{timestamp}.json`
-- No authorization check (all groups can list)
+**Helper functions**:
+- `execYak(args)` - Execute yak.py commands
+- `writeYakResponse(sourceGroup, type, data)` - Write IPC response files
 
-See `modify/src/ipc.ts.intent.md` for detailed implementation notes.
+### 2. Modify src/ipc.ts
 
-### 2. Modify container/agent-runner/src/ipc-mcp-stdio.ts
+**Import yak handler**:
+```typescript
+import { handleYakIpc } from './yak-ipc.js';
+```
+
+**Update processTaskIpc interface** (add yak fields around line 174-186):
+- `title?`, `yak_type?`, `priority?`, `description?`, `parent?`
+- `status?`, `yak_id?`
+- `new_title?`, `new_type?`, `new_priority?`, `new_description?`
+- `dep_action?`, `dep_id?`
+
+**Replace yak case statements** (around line 392-538):
+```typescript
+case 'create_yak':
+case 'list_yaks':
+case 'show_yak':
+case 'update_yak':
+case 'shave_yak':
+case 'shorn_yak':
+case 'regrow_yak':
+case 'dep_yak':
+  await handleYakIpc(data, sourceGroup, isMain);
+  break;
+```
+
+See `modify/src/ipc.ts.intent.md` for detailed refactoring notes.
+
+### 3. Modify container/agent-runner/src/ipc-mcp-stdio.ts
 
 Apply changes from `modify/container/agent-runner/src/ipc-mcp-stdio.ts`:
 
-**Add RESPONSES_DIR constant**:
+**Add RESPONSES_DIR constant** (if not already present):
 ```typescript
 const RESPONSES_DIR = path.join(IPC_DIR, 'responses');
 ```
 
-**Add waitForResponse helper**:
+**Add waitForResponse helper** (if not already present):
 - Polls for response files matching a pattern
 - Extracts timestamp from filename, only returns files created after request
 - Cleans up response file after reading
 
-**Add MCP tools**:
-- `server.tool('create_yak', ...)` - Authorization check, writes IPC, waits for response, returns yak ID
-- `server.tool('list_yaks', ...)` - Writes IPC, waits for response, returns formatted list
+**Add/Update MCP tools** (before stdio transport):
+- `server.tool('create_yak', ...)` - Create yaks with parent support
+- `server.tool('list_yaks', ...)` - List yaks by status
+- `server.tool('show_yak', ...)` - Get yak details
+- `server.tool('update_yak', ...)` - Update title/type/priority/description
+- `server.tool('shave_yak', ...)` - Start working (hairy → shearing)
+- `server.tool('shorn_yak', ...)` - Mark complete (shearing → shorn)
+- `server.tool('regrow_yak', ...)` - Reopen (shorn → hairy)
+- `server.tool('dep_yak', ...)` - Add/remove dependencies
+
+All main-only tools (except list_yaks and show_yak) check `if (!isMain)` before proceeding.
 
 See `modify/container/agent-runner/src/ipc-mcp-stdio.ts.intent.md` for detailed implementation notes.
 
-### 3. Sync agent runner source
+### 4. Sync agent runner source
 
 ```bash
 ./scripts/update-agent-source.sh
@@ -85,13 +135,13 @@ See `modify/container/agent-runner/src/ipc-mcp-stdio.ts.intent.md` for detailed 
 
 This syncs the modified `container/agent-runner/src/` files to the bind mount where the container compiles them at runtime.
 
-### 4. Build TypeScript
+### 5. Build TypeScript
 
 ```bash
 npm run build
 ```
 
-### 5. Restart service
+### 6. Restart service
 
 ```bash
 # Linux
@@ -101,7 +151,7 @@ systemctl --user restart nanoclaw
 launchctl kickstart -k gui/$(id -u)/com.nanoclaw
 ```
 
-### 6. Update groups/main/CLAUDE.md
+### 7. Update groups/main/CLAUDE.md
 
 Add the "Suggesting Improvements" section from `modify/groups/main/CLAUDE.md`.
 
@@ -137,6 +187,20 @@ When Sparky proposes a yak, approve it. Sparky should:
 python3 ~/.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py list --status hairy | grep -i "the title you suggested"
 ```
 
+### Test Yak Workflow Tools
+
+Test the full yak workflow with Sparky:
+
+1. **List yaks**: `@Sparky list all hairy yaks`
+2. **Show details**: `@Sparky show me details of yak nanoclaw-XXXX`
+3. **Start work**: `@Sparky shave yak nanoclaw-XXXX` (should move to shearing)
+4. **Check status**: List shearing yaks to verify
+5. **Complete**: `@Sparky mark yak nanoclaw-XXXX as shorn`
+6. **Verify**: List shorn yaks to confirm
+7. **Reopen** (optional): `@Sparky regrow yak nanoclaw-XXXX` (moves back to hairy)
+8. **Dependencies** (optional): `@Sparky add dependency: yak nanoclaw-AAAA depends on nanoclaw-BBBB`
+9. **Update** (optional): `@Sparky update yak nanoclaw-XXXX to have priority 1`
+
 ### Check Logs if Needed
 
 ```bash
@@ -146,6 +210,12 @@ tail -f logs/nanoclaw.log | grep -i "yak"
 Look for:
 - `Yak created via IPC` with yak ID
 - `Yaks listed via IPC` with status filter
+- `Yak shown via IPC` with yak ID
+- `Yak updated via IPC` with yak ID
+- `Yak shaved via IPC` with yak ID
+- `Yak marked as shorn via IPC` with yak ID
+- `Yak regrown via IPC` with yak ID
+- `Yak dependency managed via IPC` with yak IDs and action
 
 ## Troubleshooting
 
@@ -235,19 +305,28 @@ tail logs/nanoclaw.log | grep "IPC watcher"
 2. **MCP Server** (in container): Writes `data/ipc/main/tasks/create_yak_{timestamp}.json`
 3. **MCP Server**: Polls `/workspace/ipc/responses/` for response file (every 100ms, 2s timeout)
 4. **Controller** (on host): Polls IPC directory every 1 second (IPC_POLL_INTERVAL)
-5. **Controller**: Reads task, validates, executes `yak.py create` on host
-6. **Controller**: Writes response to `data/ipc/main/responses/yak_{timestamp}.json`
-7. **MCP Server**: Detects response file, reads it, deletes it, returns to agent
-8. **Agent**: Receives yak ID immediately (synchronous from agent's perspective)
+5. **Controller**: Reads task via `processTaskIpc()` in src/ipc.ts
+6. **Dispatcher**: Routes yak operations to `handleYakIpc()` in src/yak-ipc.ts
+7. **Yak Handler**: Validates, executes `yak.py` command on host (e.g., `create`, `list`, `shave`, etc.)
+8. **Yak Handler**: Writes response to `data/ipc/main/responses/{operation}_{timestamp}.json`
+9. **MCP Server**: Detects response file, reads it, deletes it, returns to agent
+10. **Agent**: Receives result immediately (synchronous from agent's perspective)
 
 ### Authorization Model
 
-- **create_yak**: Main group only (`if (!isMain)`)
-  - Prevents other groups from creating yaks
-  - Other groups are for external users, shouldn't modify NanoClaw itself
-- **list_yaks**: All groups (no check)
-  - Read-only operation
-  - Useful for transparency across groups
+**Main-only operations** (require `if (!isMain)` check):
+- **create_yak**: Create new yaks
+- **update_yak**: Modify yak metadata
+- **shave_yak**: Start working (hairy → shearing)
+- **shorn_yak**: Mark complete (shearing → shorn)
+- **regrow_yak**: Reopen (shorn → hairy)
+- **dep_yak**: Manage dependencies
+
+**All groups** (no authorization check):
+- **list_yaks**: List yaks by status (read-only)
+- **show_yak**: Get yak details (read-only)
+
+**Rationale**: Other groups are for external users who shouldn't modify NanoClaw's development backlog. Read operations are allowed for transparency.
 
 ### Why Not Direct .yaks/ Access?
 
@@ -261,18 +340,23 @@ Agent has read access to `/workspace/project/.yaks/` but:
 
 To remove this capability:
 
-1. Remove create_yak and list_yaks cases from `src/ipc.ts`
-2. Remove yak fields from processTaskIpc interface
-3. Remove "Suggesting Improvements" section from `groups/main/CLAUDE.md`
-4. Rebuild and restart:
+1. Delete `src/yak-ipc.ts`
+2. Remove `import { handleYakIpc } from './yak-ipc.js'` from `src/ipc.ts`
+3. Remove yak case statements from `src/ipc.ts` processTaskIpc switch
+4. Remove yak fields from processTaskIpc interface
+5. Remove all yak MCP tools from `container/agent-runner/src/ipc-mcp-stdio.ts`
+6. Remove "Suggesting Improvements" and "Available Yak Tools" sections from `groups/main/CLAUDE.md`
+7. Sync, rebuild, and restart:
    ```bash
+   ./scripts/update-agent-source.sh
    npm run build
    systemctl --user restart nanoclaw  # or launchctl kickstart for macOS
    ```
-5. Optionally keep yaks created through this skill - they're just regular tasks
+8. Optionally keep yaks created through this skill - they're just regular tasks in .yaks/
 
 ## References
 
 - Yaks plugin: https://github.com/anthropics/yaks-marketplace
 - IPC pattern: See src/ipc.ts (register_group, schedule_task examples)
 - Container mounts: See src/container-runner.ts (lines 65-173)
+- Yak handlers: See src/yak-ipc.ts (refactored handlers for all yak operations)

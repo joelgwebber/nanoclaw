@@ -14,6 +14,7 @@ import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
+import { handleYakIpc } from './yak-ipc.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
@@ -170,14 +171,20 @@ export async function processTaskIpc(
     trigger?: string;
     requiresTrigger?: boolean;
     containerConfig?: RegisteredGroup['containerConfig'];
-    // For create_yak
+    // For yak operations (delegated to yak-ipc.ts)
     title?: string;
     yak_type?: string;
     priority?: number;
     description?: string;
     parent?: string;
-    // For list_yaks
     status?: string; // 'hairy' | 'shearing' | 'shorn' | 'all'
+    yak_id?: string;
+    new_title?: string;
+    new_type?: string;
+    new_priority?: number;
+    new_description?: string;
+    dep_action?: 'add' | 'remove';
+    dep_id?: string;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -390,151 +397,14 @@ export async function processTaskIpc(
       break;
 
     case 'create_yak':
-      // Only main group can create yaks
-      if (!isMain) {
-        logger.warn(
-          { sourceGroup },
-          'Unauthorized create_yak attempt blocked',
-        );
-        break;
-      }
-      if (data.title && data.yak_type && data.priority && data.description) {
-        try {
-          const { execSync } = await import('child_process');
-          const args = [
-            'create',
-            '--title',
-            data.title,
-            '--type',
-            data.yak_type,
-            '--priority',
-            data.priority.toString(),
-            '--description',
-            data.description,
-          ];
-          if (data.parent) {
-            args.push('--parent', data.parent);
-          }
-
-          const yakScript = path.join(
-            process.env.HOME || '',
-            '.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py',
-          );
-
-          const result = execSync(
-            `python3 "${yakScript}" ${args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`,
-            { encoding: 'utf-8' },
-          );
-
-          logger.info(
-            { sourceGroup, title: data.title, result: result.trim() },
-            'Yak created via IPC',
-          );
-
-          // Write response file with yak ID for agent feedback
-          // Result format: "Created nanoclaw-xxxx: Title"
-          const yakIdMatch = result.match(/Created (nanoclaw-[a-f0-9]+):/);
-          if (yakIdMatch) {
-            const responseFile = path.join(
-              DATA_DIR,
-              'ipc',
-              sourceGroup,
-              'responses',
-              `yak_${Date.now()}.json`,
-            );
-            fs.mkdirSync(path.dirname(responseFile), { recursive: true });
-            fs.writeFileSync(
-              responseFile,
-              JSON.stringify(
-                {
-                  success: true,
-                  yak_id: yakIdMatch[1],
-                  title: data.title,
-                  type: data.yak_type,
-                  priority: data.priority,
-                  created: new Date().toISOString(),
-                },
-                null,
-                2,
-              ),
-            );
-          }
-        } catch (err) {
-          logger.error(
-            { err, sourceGroup, title: data.title },
-            'Error creating yak via IPC',
-          );
-
-          // Write error response file
-          const responseFile = path.join(
-            DATA_DIR,
-            'ipc',
-            sourceGroup,
-            'responses',
-            `yak_${Date.now()}.json`,
-          );
-          fs.mkdirSync(path.dirname(responseFile), { recursive: true });
-          fs.writeFileSync(
-            responseFile,
-            JSON.stringify(
-              {
-                success: false,
-                error: err instanceof Error ? err.message : String(err),
-                title: data.title,
-              },
-              null,
-              2,
-            ),
-          );
-        }
-      } else {
-        logger.warn(
-          { data },
-          'Invalid create_yak request - missing required fields (title, yak_type, priority, description)',
-        );
-      }
-      break;
-
     case 'list_yaks':
-      try {
-        const { execSync } = await import('child_process');
-        const yakScript = path.join(
-          process.env.HOME || '',
-          '.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py',
-        );
-
-        const args = ['list', '--json'];
-
-        // Filter by status if provided
-        if (data.status && data.status !== 'all') {
-          args.push('--status', data.status);
-        }
-
-        // Note: search functionality not directly supported by yak.py list command
-        // Agent can filter results client-side if needed
-
-        const result = execSync(
-          `python3 "${yakScript}" ${args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`,
-          { encoding: 'utf-8' },
-        );
-
-        const responseFile = path.join(
-          DATA_DIR,
-          'ipc',
-          sourceGroup,
-          'responses',
-          `list_yaks_${Date.now()}.json`,
-        );
-        fs.mkdirSync(path.dirname(responseFile), { recursive: true });
-        fs.writeFileSync(responseFile, result);
-
-        logger.info(
-          { sourceGroup, status: data.status },
-          'Yaks listed via IPC',
-        );
-      } catch (err) {
-        logger.error({ err, sourceGroup }, 'Error listing yaks via IPC');
-      }
+    case 'show_yak':
+    case 'update_yak':
+    case 'shave_yak':
+    case 'shorn_yak':
+    case 'regrow_yak':
+    case 'dep_yak':
+      await handleYakIpc(data, sourceGroup, isMain);
       break;
 
     default:

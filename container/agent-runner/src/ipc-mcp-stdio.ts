@@ -485,6 +485,456 @@ server.tool(
   },
 );
 
+server.tool(
+  'show_yak',
+  'Get full details of a specific yak including description, timestamps, dependencies, and parent/child relationships.',
+  {
+    yak_id: z.string().describe('Yak ID (e.g., "nanoclaw-xxxx")'),
+  },
+  async (args) => {
+    const requestTime = Date.now();
+    const data = {
+      type: 'show_yak',
+      yak_id: args.yak_id,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    try {
+      const yak = await waitForResponse(requestTime, /^show_yak_\d+\.json$/);
+
+      if (!yak.success && yak.error) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error showing yak: ${yak.error}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Format yak details
+      const details = [
+        `ID: ${yak.id}`,
+        `Title: ${yak.title}`,
+        `Type: ${yak.type}`,
+        `Priority: ${yak.priority}`,
+        `Status: ${yak.status}`,
+        `Created: ${yak.created}`,
+        `Updated: ${yak.updated}`,
+      ];
+
+      if (yak.description) {
+        details.push(`\nDescription:\n${yak.description}`);
+      }
+
+      if (yak.parent) {
+        details.push(`\nParent: ${yak.parent}`);
+      }
+
+      if (yak.children && yak.children.length > 0) {
+        details.push(`\nChildren: ${yak.children.join(', ')}`);
+      }
+
+      if (yak.depends_on && yak.depends_on.length > 0) {
+        details.push(`\nDepends on: ${yak.depends_on.join(', ')}`);
+      }
+
+      if (yak.blocks && yak.blocks.length > 0) {
+        details.push(`\nBlocks: ${yak.blocks.join(', ')}`);
+      }
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: details.join('\n'),
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error showing yak: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  'update_yak',
+  'Update a yak\'s metadata (title, type, priority, or description). Main group only.',
+  {
+    yak_id: z.string().describe('Yak ID to update'),
+    title: z.string().optional().describe('New title'),
+    yak_type: z
+      .enum(['bug', 'feature', 'task'])
+      .optional()
+      .describe('New type'),
+    priority: z
+      .number()
+      .int()
+      .min(1)
+      .max(3)
+      .optional()
+      .describe('New priority (1-3)'),
+    description: z.string().optional().describe('New description'),
+  },
+  async (args) => {
+    if (!isMain) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Only the main group can update yaks.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const requestTime = Date.now();
+    const data = {
+      type: 'update_yak',
+      yak_id: args.yak_id,
+      new_title: args.title,
+      new_type: args.yak_type,
+      new_priority: args.priority,
+      new_description: args.description,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    try {
+      const response = await waitForResponse(
+        requestTime,
+        /^update_yak_\d+\.json$/,
+      );
+
+      if (response.success) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Yak ${response.yak_id} updated successfully.`,
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed to update yak: ${response.error}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error updating yak: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  'shave_yak',
+  'Start working on a yak (moves from hairy to shearing status). Main group only.',
+  {
+    yak_id: z.string().describe('Yak ID to start shaving'),
+  },
+  async (args) => {
+    if (!isMain) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Only the main group can shave yaks.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const requestTime = Date.now();
+    const data = {
+      type: 'shave_yak',
+      yak_id: args.yak_id,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    try {
+      const response = await waitForResponse(
+        requestTime,
+        /^shave_yak_\d+\.json$/,
+      );
+
+      if (response.success) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Started shaving yak ${response.yak_id} (now shearing).`,
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed to shave yak: ${response.error}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error shaving yak: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  'shorn_yak',
+  'Mark a yak as completed (moves to shorn status). Main group only.',
+  {
+    yak_id: z.string().describe('Yak ID to mark as shorn'),
+  },
+  async (args) => {
+    if (!isMain) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Only the main group can mark yaks as shorn.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const requestTime = Date.now();
+    const data = {
+      type: 'shorn_yak',
+      yak_id: args.yak_id,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    try {
+      const response = await waitForResponse(
+        requestTime,
+        /^shorn_yak_\d+\.json$/,
+      );
+
+      if (response.success) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Yak ${response.yak_id} marked as shorn (completed).`,
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed to mark yak as shorn: ${response.error}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error marking yak as shorn: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  'regrow_yak',
+  'Reopen a completed yak (moves from shorn back to hairy). Main group only.',
+  {
+    yak_id: z.string().describe('Yak ID to regrow'),
+  },
+  async (args) => {
+    if (!isMain) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Only the main group can regrow yaks.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const requestTime = Date.now();
+    const data = {
+      type: 'regrow_yak',
+      yak_id: args.yak_id,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    try {
+      const response = await waitForResponse(
+        requestTime,
+        /^regrow_yak_\d+\.json$/,
+      );
+
+      if (response.success) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Yak ${response.yak_id} regrown (reopened as hairy).`,
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed to regrow yak: ${response.error}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error regrowing yak: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  'dep_yak',
+  'Manage yak dependencies (add or remove blocking dependencies). Main group only.',
+  {
+    yak_id: z.string().describe('Yak ID to manage dependencies for'),
+    dep_action: z
+      .enum(['add', 'remove'])
+      .describe('Add or remove dependency'),
+    dep_id: z
+      .string()
+      .describe('Dependency yak ID (this yak depends on dep_id)'),
+  },
+  async (args) => {
+    if (!isMain) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Only the main group can manage yak dependencies.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const requestTime = Date.now();
+    const data = {
+      type: 'dep_yak',
+      yak_id: args.yak_id,
+      dep_action: args.dep_action,
+      dep_id: args.dep_id,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    try {
+      const response = await waitForResponse(
+        requestTime,
+        /^dep_yak_\d+\.json$/,
+      );
+
+      if (response.success) {
+        const action = args.dep_action === 'add' ? 'added to' : 'removed from';
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Dependency ${args.dep_id} ${action} ${args.yak_id}.`,
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed to manage dependency: ${response.error}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error managing dependency: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);
