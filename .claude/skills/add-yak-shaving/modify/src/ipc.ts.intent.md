@@ -2,64 +2,99 @@
 
 ## What changed
 
-Added IPC handlers for agent-created yaks with introspection capabilities:
-1. **create_yak**: Agent can create yaks via IPC, gets confirmation with yak ID
-2. **list_yaks**: Agent can list yaks by status (hairy/shearing/shorn/all)
+**Refactored** yak operations from inline implementation to dispatcher pattern.
 
-## Key sections
+**Before v2.0.0**:
+- 150+ lines of inline yak code (create_yak, list_yaks handlers)
+- Mixed concerns (IPC routing + yak business logic)
 
-### processTaskIpc interface (around line 173-181)
+**After v2.0.0**:
+- 8-line dispatcher that routes all yak operations to `handleYakIpc()`
+- Clean separation: ipc.ts handles routing, yak-ipc.ts handles yak logic
 
-Added to the `data` parameter:
+## Modifications
+
+### 1. Add import (line ~17)
+
+Import the yak handler from the new dedicated module:
+
 ```typescript
-// For create_yak
-title?: string;
-yak_type?: string;
-priority?: number;
-description?: string;
-parent?: string;
-// For list_yaks
-status?: string; // 'hairy' | 'shearing' | 'shorn' | 'all'
+import { handleYakIpc } from './yak-ipc.js';
 ```
 
-### create_yak handler (after register_group case, before default)
+### 2. Expand interface (lines ~155-186)
 
-- **Authorization**: Only main group can create yaks (`if (!isMain)`)
-- **Creates yak**: Executes `yak.py create` on host with proper escaping
-- **Response file**: Writes to `data/ipc/{sourceGroup}/responses/yak_{timestamp}.json`
-  - Success: Returns `{success: true, yak_id, title, type, priority, created}`
-  - Error: Returns `{success: false, error, title}`
-- **Path fix**: Uses `DATA_DIR/ipc/sourceGroup/responses/` NOT `DATA_DIR/sessions/...`
+Add yak-related fields to `processTaskIpc` data parameter:
 
-### list_yaks handler (after create_yak case, before default)
+- **Base fields**: `title`, `yak_type`, `priority`, `description`, `parent`
+- **Query fields**: `status`, `yak_id`
+- **Update fields**: `new_title`, `new_type`, `new_priority`, `new_description`
+- **Dependency fields**: `dep_action`, `dep_id`
 
-- **No authorization check**: Any group can list yaks (design decision)
-- **Lists yaks**: Executes `yak.py list --json` with optional `--status` filter
-- **Response file**: Writes raw JSON to `data/ipc/{sourceGroup}/responses/list_yaks_{timestamp}.json`
-- **Status values**: `hairy`, `shearing`, `shorn`, or `all` (omit for all)
-- **Client-side filtering**: Keyword search not supported by yak.py, agent can filter JSON
+### 3. Replace case statements (lines ~392-538)
+
+Replace ALL inline yak handlers with dispatcher:
+
+```typescript
+case 'create_yak':
+case 'list_yaks':
+case 'show_yak':
+case 'update_yak':
+case 'shave_yak':
+case 'shorn_yak':
+case 'regrow_yak':
+case 'dep_yak':
+  await handleYakIpc(data, sourceGroup, isMain);
+  break;
+```
+
+This replaces:
+- `create_yak` handler (~98 lines)
+- `list_yaks` handler (~40 lines)
+- Total: 138 lines removed, 9 lines added
+
+## Why this refactoring?
+
+### Benefits
+
+1. **Cleaner separation of concerns**
+   - ipc.ts: Routes IPC messages to appropriate handlers
+   - yak-ipc.ts: Handles yak business logic
+
+2. **Easier to maintain**
+   - Adding new yak operations doesn't bloat ipc.ts
+   - Yak logic centralized in one file
+
+3. **Easier to test**
+   - Can test yak operations independently of IPC layer
+   - Mock dependencies in isolation
+
+4. **Better code organization**
+   - ipc.ts stays focused on IPC routing
+   - yak-ipc.ts handles yak-specific concerns
+
+### Trade-offs
+
+- **Added complexity**: One more file to navigate
+- **Indirection**: Jump from ipc.ts to yak-ipc.ts to understand flow
+
+**Verdict**: Worth it! As we add more yak operations (8 total now), the benefits of separation outweigh the indirection cost.
 
 ## Invariants
 
-- All existing IPC handlers (schedule_task, register_group, etc.) are unchanged
-- IPC watcher polling (IPC_POLL_INTERVAL = 1s) is unchanged
-- IPC directory structure (`data/ipc/{group}/tasks/`) is unchanged
-- Error handling pattern (try/catch with logging) is preserved
-- execSync command escaping pattern is preserved
+1. **All yak operations** must be listed in the dispatcher case statement
+2. **Interface contract**: Data parameter must include all fields needed by yak-ipc.ts
+3. **Authorization**: Still enforced by yak-ipc.ts handlers (not ipc.ts)
+4. **Response files**: Still written by yak-ipc.ts to `data/ipc/{group}/responses/`
 
-## Must-keep
+## Migration path
 
-- The `isMain` authorization check for create_yak
-- The `DATA_DIR` import and usage for paths
-- The yak.py script path resolution using `process.env.HOME`
-- The regex pattern for extracting yak ID: `/Created (nanoclaw-[a-f0-9]+):/`
-- The `fs.mkdirSync(path.dirname(responseFile), { recursive: true })` pattern
-- JSON formatting with 2-space indent for response files
+If implementing this skill on an existing installation with inline yak handlers:
 
-## Why IPC instead of direct .yaks/ access?
+1. Create `src/yak-ipc.ts` with all handlers
+2. Add import to `src/ipc.ts`
+3. Replace inline yak cases with dispatcher
+4. Remove old inline handler code
+5. Build and test
 
-- Agent has READ-ONLY access to `/workspace/project/.yaks/` (can list existing)
-- Agent CANNOT write to .yaks/ (read-only mount)
-- Agent CANNOT execute yak.py (not installed in container, lives at `~/.claude/plugins/`)
-- IPC allows controller to execute host commands on agent's behalf
-- Response files provide immediate feedback to agent
+The dispatcher pattern makes it easy to add more operations later without touching ipc.ts.
