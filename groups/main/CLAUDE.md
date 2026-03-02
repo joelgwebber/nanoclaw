@@ -665,17 +665,8 @@ When you encounter limitations, technical debt, or better approaches while helpi
 
 Before proposing, check if a similar yak already exists:
 
-```bash
-cat > /workspace/ipc/tasks/list_yaks_$(date +%s).json <<'EOF'
-{
-  "type": "list_yaks",
-  "status": "hairy"
-}
-EOF
-
-# Wait ~1 second for response
-sleep 1
-cat /workspace/ipc/responses/list_yaks_*.json | tail -1
+```
+mcp__nanoclaw__list_yaks(status="hairy")
 ```
 
 Status values: `hairy` (not started), `shearing` (in progress), `shorn` (completed), `all`
@@ -710,41 +701,19 @@ Should I create a yak to track this?
 
 **Step 3: Create the yak (if approved)**
 
-```bash
-cat > /workspace/ipc/tasks/create_yak_$(date +%s).json <<'EOF'
-{
-  "type": "create_yak",
-  "title": "The proposed title",
-  "yak_type": "bug|feature|task",
-  "priority": 1,
-  "description": "Full description including implementation notes"
-}
-EOF
+```
+mcp__nanoclaw__create_yak(
+  title="The proposed title",
+  yak_type="bug",  # or "feature" or "task"
+  priority=2,
+  description="Full description including implementation notes",
+  parent="nanoclaw-xxxx"  # Optional: parent yak ID for subtasks
+)
 ```
 
-**Important**:
-- Priority must be a number (1, 2, or 3), not "p1", "p2", "p3"
-- Optional: Add `"parent": "nanoclaw-xxxx"` to create a child yak
-
-**Step 4: Confirm creation**
-
-Wait ~1 second and check the response:
-
-```bash
-sleep 1
-cat /workspace/ipc/responses/yak_*.json | tail -1
+The tool will return the yak ID upon success:
 ```
-
-Success response:
-```json
-{
-  "success": true,
-  "yak_id": "nanoclaw-xxxx",
-  "title": "...",
-  "type": "feature",
-  "priority": 2,
-  "created": "2026-03-01T12:34:56.789Z"
-}
+Yak created: nanoclaw-xxxx - "The proposed title"
 ```
 
 Tell the user:
@@ -775,6 +744,18 @@ Yak created! (nanoclaw-XXXX) You can view it with the yaks tools or I can show i
 - **p1**: Blocking issues, critical bugs, security problems
 - **p2**: Valuable features, important optimizations, significant debt
 - **p3**: Nice-to-haves, minor improvements, low-risk enhancements
+
+### Available Yak Tools
+
+**mcp__nanoclaw__list_yaks**
+- List yaks filtered by status
+- Parameters: `status` (optional: "hairy", "shearing", "shorn", "all", default: "hairy")
+- Returns formatted list of yaks with ID, title, type, priority, and status
+
+**mcp__nanoclaw__create_yak**
+- Create a new yak (main group only)
+- Parameters: `title`, `yak_type` (bug/feature/task), `priority` (1-3), `description`, `parent` (optional)
+- Returns yak ID upon success
 
 ---
 

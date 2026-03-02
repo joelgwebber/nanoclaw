@@ -5,10 +5,10 @@ description: Enable agents to create and query yaks via IPC for self-improvement
 
 # Add Yak Shaving Capability
 
-This skill enables Sparky (the main channel agent) to suggest improvements to NanoClaw by creating yaks (tasks) via IPC. It provides:
-- **create_yak**: Agent-initiated yak creation with approval workflow
-- **list_yaks**: Query existing yaks to avoid duplicates
-- **Response files**: Immediate feedback with yak IDs
+This skill enables Sparky (the main channel agent) to suggest improvements to NanoClaw by creating yaks (tasks) via MCP tools. It provides:
+- **mcp__nanoclaw__create_yak**: Agent-initiated yak creation with approval workflow
+- **mcp__nanoclaw__list_yaks**: Query existing yaks to avoid duplicates
+- **IPC backend**: Tools write IPC requests, poll for responses, return results seamlessly
 
 ## Phase 1: Pre-flight
 
@@ -17,11 +17,12 @@ This skill enables Sparky (the main channel agent) to suggest improvements to Na
 Check if yak-shaving is already configured:
 
 ```bash
-grep -q "create_yak" src/ipc.ts && echo "Code integrated" || echo "Code not integrated"
+grep -q "create_yak" src/ipc.ts && echo "IPC handlers integrated" || echo "IPC handlers not integrated"
+grep -q "'create_yak'" container/agent-runner/src/ipc-mcp-stdio.ts && echo "MCP tools integrated" || echo "MCP tools not integrated"
 grep -q "## Suggesting Improvements" groups/main/CLAUDE.md && echo "Guidance added" || echo "Guidance not added"
 ```
 
-If both show integrated, skip to Phase 3 (Verify).
+If all show integrated, skip to Phase 3 (Verify).
 
 ### Prerequisites
 
@@ -56,13 +57,41 @@ Apply changes from `modify/src/ipc.ts`:
 
 See `modify/src/ipc.ts.intent.md` for detailed implementation notes.
 
-### 2. Build TypeScript
+### 2. Modify container/agent-runner/src/ipc-mcp-stdio.ts
+
+Apply changes from `modify/container/agent-runner/src/ipc-mcp-stdio.ts`:
+
+**Add RESPONSES_DIR constant**:
+```typescript
+const RESPONSES_DIR = path.join(IPC_DIR, 'responses');
+```
+
+**Add waitForResponse helper**:
+- Polls for response files matching a pattern
+- Extracts timestamp from filename, only returns files created after request
+- Cleans up response file after reading
+
+**Add MCP tools**:
+- `server.tool('create_yak', ...)` - Authorization check, writes IPC, waits for response, returns yak ID
+- `server.tool('list_yaks', ...)` - Writes IPC, waits for response, returns formatted list
+
+See `modify/container/agent-runner/src/ipc-mcp-stdio.ts.intent.md` for detailed implementation notes.
+
+### 3. Sync agent runner source
+
+```bash
+./scripts/update-agent-source.sh
+```
+
+This syncs the modified `container/agent-runner/src/` files to the bind mount where the container compiles them at runtime.
+
+### 4. Build TypeScript
 
 ```bash
 npm run build
 ```
 
-### 3. Restart service
+### 5. Restart service
 
 ```bash
 # Linux
@@ -72,7 +101,7 @@ systemctl --user restart nanoclaw
 launchctl kickstart -k gui/$(id -u)/com.nanoclaw
 ```
 
-### 4. Update groups/main/CLAUDE.md
+### 6. Update groups/main/CLAUDE.md
 
 Add the "Suggesting Improvements" section from `modify/groups/main/CLAUDE.md`.
 
@@ -91,15 +120,15 @@ Send a message to Sparky in the main channel:
 ```
 
 Sparky should:
-1. Check existing hairy yaks via list_yaks IPC
+1. Check existing hairy yaks via `mcp__nanoclaw__list_yaks(status="hairy")`
 2. Propose 2-3 improvements with detailed context
 3. Ask for approval before creating yaks
 
 ### Approve a Suggestion
 
 When Sparky proposes a yak, approve it. Sparky should:
-1. Send create_yak IPC message
-2. Wait ~1 second for response
+1. Call `mcp__nanoclaw__create_yak(...)` with the proposed details
+2. Receive immediate response with yak ID
 3. Report back with yak ID (e.g., "Yak created! (nanoclaw-XXXX)")
 
 ### Verify Yak Created
@@ -200,13 +229,16 @@ tail logs/nanoclaw.log | grep "IPC watcher"
 - Write to `.yaks/` (read-only mount)
 - Execute `yak.py` (not installed in container, lives at `~/.claude/plugins/` on host)
 
-### IPC Flow
+### MCP Tool Flow
 
-1. **Agent**: Writes `data/ipc/main/tasks/create_yak_{timestamp}.json`
-2. **Controller**: Polls IPC directory every 1 second (IPC_POLL_INTERVAL)
-3. **Controller**: Reads task, validates, executes `yak.py create` on host
-4. **Controller**: Writes response to `data/ipc/main/responses/yak_{timestamp}.json`
-5. **Agent**: Reads response file (~1 second later), gets yak ID
+1. **Agent**: Calls `mcp__nanoclaw__create_yak(...)` MCP tool
+2. **MCP Server** (in container): Writes `data/ipc/main/tasks/create_yak_{timestamp}.json`
+3. **MCP Server**: Polls `/workspace/ipc/responses/` for response file (every 100ms, 2s timeout)
+4. **Controller** (on host): Polls IPC directory every 1 second (IPC_POLL_INTERVAL)
+5. **Controller**: Reads task, validates, executes `yak.py create` on host
+6. **Controller**: Writes response to `data/ipc/main/responses/yak_{timestamp}.json`
+7. **MCP Server**: Detects response file, reads it, deletes it, returns to agent
+8. **Agent**: Receives yak ID immediately (synchronous from agent's perspective)
 
 ### Authorization Model
 

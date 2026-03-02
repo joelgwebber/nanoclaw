@@ -5,6 +5,7 @@ core_version: 0.1.0
 adds: []
 modifies:
   - src/ipc.ts
+  - container/agent-runner/src/ipc-mcp-stdio.ts
   - groups/main/CLAUDE.md
 structured:
   npm_dependencies: {}
