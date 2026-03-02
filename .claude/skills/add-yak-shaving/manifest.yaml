@@ -1,0 +1,13 @@
+skill: yak-shaving
+version: 1.0.0
+description: "Agent-created yaks via IPC with introspection capabilities"
+core_version: 0.1.0
+adds: []
+modifies:
+  - src/ipc.ts
+  - groups/main/CLAUDE.md
+structured:
+  npm_dependencies: {}
+conflicts: []
+depends: []
+test: ""

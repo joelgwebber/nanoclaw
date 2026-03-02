@@ -178,7 +178,6 @@ export async function processTaskIpc(
     parent?: string;
     // For list_yaks
     status?: string; // 'hairy' | 'shearing' | 'shorn' | 'all'
-    search?: string; // keyword search
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -438,9 +437,8 @@ export async function processTaskIpc(
           if (yakIdMatch) {
             const responseFile = path.join(
               DATA_DIR,
-              'sessions',
-              sourceGroup,
               'ipc',
+              sourceGroup,
               'responses',
               `yak_${Date.now()}.json`,
             );
@@ -470,9 +468,8 @@ export async function processTaskIpc(
           // Write error response file
           const responseFile = path.join(
             DATA_DIR,
-            'sessions',
-            sourceGroup,
             'ipc',
+            sourceGroup,
             'responses',
             `yak_${Date.now()}.json`,
           );
@@ -523,9 +520,8 @@ export async function processTaskIpc(
 
         const responseFile = path.join(
           DATA_DIR,
-          'sessions',
-          sourceGroup,
           'ipc',
+          sourceGroup,
           'responses',
           `list_yaks_${Date.now()}.json`,
         );
@@ -533,7 +529,7 @@ export async function processTaskIpc(
         fs.writeFileSync(responseFile, result);
 
         logger.info(
-          { sourceGroup, status: data.status, search: data.search },
+          { sourceGroup, status: data.status },
           'Yaks listed via IPC',
         );
       } catch (err) {

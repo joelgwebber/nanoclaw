@@ -4,7 +4,8 @@ title: Make yak suggestions introspectable from container
 type: feature
 priority: 3
 created: '2026-03-01T17:51:42Z'
-updated: '2026-03-02T00:16:20Z'
+updated: '2026-03-02T00:33:51Z'
+commit: af9927f
 ---
 
 Currently, Sparky can create yaks via IPC but has no visibility into what yaks exist, their status, or progress. This makes it impossible to:
