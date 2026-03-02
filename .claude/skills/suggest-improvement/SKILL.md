@@ -47,6 +47,34 @@ The user may also explicitly ask:
 
 ## How to Use This Skill
 
+### Step 0: Check for Duplicates
+
+Before suggesting a new yak, check if a similar improvement already exists:
+
+**List all hairy (unstarted) yaks**:
+```bash
+cat > /workspace/ipc/tasks/list_yaks_$(date +%s).json <<'EOF'
+{
+  "type": "list_yaks",
+  "status": "hairy"
+}
+EOF
+
+# Wait ~1 second for response
+sleep 1
+cat /workspace/ipc/responses/list_yaks_*.json | tail -1
+```
+
+**Status values**:
+- `hairy` = not started
+- `shearing` = in progress
+- `shorn` = completed
+- `all` = everything
+
+**Note**: The list response is JSON - you can filter it client-side by title/description keywords if needed.
+
+If a similar yak already exists, don't create a duplicate. Instead, reference the existing yak or suggest enhancing it.
+
 ### Step 1: Identify the Improvement
 
 When you encounter a situation worthy of suggesting, analyze:
@@ -105,10 +133,31 @@ EOF
 
 ### Step 4: Confirm Creation
 
-After creating, tell the user:
+After sending the IPC message, wait ~1 second for the response file:
+
+```bash
+sleep 1
+cat /workspace/ipc/responses/yak_*.json | tail -1
+```
+
+The response will contain:
+```json
+{
+  "success": true,
+  "yak_id": "nanoclaw-xxxx",
+  "title": "...",
+  "type": "feature",
+  "priority": 2,
+  "created": "2026-03-01T12:34:56.789Z"
+}
+```
+
+If successful, tell the user:
 ```
 Yak created! (nanoclaw-XXXX) You can view it with the yaks tools or I can show it to you.
 ```
+
+If the response shows an error, tell the user what went wrong.
 
 ## Examples
 
@@ -319,11 +368,94 @@ export async function processTaskIpc(
     priority?: number;
     description?: string;
     parent?: string;
+    // For list_yaks
+    status?: string; // 'hairy' | 'shearing' | 'shorn' | 'all'
   },
   sourceGroup: string,
   isMain: boolean,
   deps: IpcDeps,
 ): Promise<void> {
+```
+
+**Add response file writing to create_yak** (after successful yak creation):
+
+```typescript
+// Write response file with yak ID for agent feedback
+// Result format: "Created nanoclaw-xxxx: Title"
+const yakIdMatch = result.match(/Created (nanoclaw-[a-f0-9]+):/);
+if (yakIdMatch) {
+  const responseFile = path.join(
+    DATA_DIR,
+    'sessions',
+    sourceGroup,
+    'ipc',
+    'responses',
+    `yak_${Date.now()}.json`,
+  );
+  fs.mkdirSync(path.dirname(responseFile), { recursive: true });
+  fs.writeFileSync(
+    responseFile,
+    JSON.stringify(
+      {
+        success: true,
+        yak_id: yakIdMatch[1],
+        title: data.title,
+        type: data.yak_type,
+        priority: data.priority,
+        created: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+  );
+}
+```
+
+**Add list_yaks handler** (after create_yak case, before default):
+
+```typescript
+case 'list_yaks':
+  try {
+    const { execSync } = await import('child_process');
+    const yakScript = path.join(
+      process.env.HOME || '',
+      '.claude/plugins/cache/yaks-marketplace/yaks/0.1.1/scripts/yak.py',
+    );
+
+    const args = ['list', '--json'];
+
+    // Filter by status if provided
+    if (data.status && data.status !== 'all') {
+      args.push('--status', data.status);
+    }
+
+    // Note: Keyword search not directly supported by yak.py list command
+    // Agent can filter results client-side if needed
+
+    const result = execSync(
+      `python3 "${yakScript}" ${args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`,
+      { encoding: 'utf-8' },
+    );
+
+    const responseFile = path.join(
+      DATA_DIR,
+      'sessions',
+      sourceGroup,
+      'ipc',
+      'responses',
+      `list_yaks_${Date.now()}.json`,
+    );
+    fs.mkdirSync(path.dirname(responseFile), { recursive: true });
+    fs.writeFileSync(responseFile, result);
+
+    logger.info(
+      { sourceGroup, status: data.status, search: data.search },
+      'Yaks listed via IPC',
+    );
+  } catch (err) {
+    logger.error({ err, sourceGroup }, 'Error listing yaks via IPC');
+  }
+  break;
 ```
 
 ### Deployment
