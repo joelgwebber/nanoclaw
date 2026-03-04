@@ -40,15 +40,20 @@ Wait for the user to provide:
 
 ### 1. Create MCP Server
 
-Create `container/agent-runner/src/seafile-mcp-stdio.ts`:
+Create `container/agent-runner/src/seafile-mcp-stdio.ts` with the Seafile MCP server implementation.
 
-**Note**: This is a large file (~450 lines). The key features are:
+**Purpose**: Provides 9 tools for managing Seafile cloud storage with hybrid local/API access.
 
-1. **Hybrid Local/API Access**: Tries to read files from local filesystem first (`/workspace/seafile`), falls back to API
-2. **9 Tools**: list_libraries, list_dir, read_file, upload_file, create_dir, delete, move, search, create_share_link
-3. **Share Link Creation**: New tool for creating shareable download links (stopgap for WhatsApp image sending)
+**Key features**:
+- **Hybrid access**: Tries local filesystem first (`/workspace/seafile`), falls back to Seafile API
+- **9 tools**: list_libraries, list_dir, read_file, upload_file, create_dir, delete, move, search, create_share_link
+- **Share link creation**: Generate shareable download URLs (important for WhatsApp image sharing)
 
-See the current `container/agent-runner/src/seafile-mcp-stdio.ts` for the complete implementation. Key sections:
+**Implementation**: See `modify/container/agent-runner/src/seafile-mcp-stdio.ts` for the complete MCP server code (~450 lines).
+
+**Architecture notes**: See `modify/container/agent-runner/src/seafile-mcp-stdio.ts.intent.md` for detailed design decisions on hybrid access, share links, and local path structure.
+
+**Key implementation details**:
 
 **Environment Setup**:
 ```typescript
@@ -97,7 +102,12 @@ The complete file implements all 9 tools with full error handling, TypeScript ty
 
 ### 2. Wire into Agent Runner
 
-Modify `container/agent-runner/src/index.ts`:
+Modify `container/agent-runner/src/index.ts` to integrate the Seafile MCP server.
+
+**See** `modify/container/agent-runner/src/index.ts` for all required modifications.
+**Architecture notes**: `modify/container/agent-runner/src/index.ts.intent.md` explains the integration pattern.
+
+**Summary of changes**:
 
 **Add path variable** (around line 544):
 
@@ -187,9 +197,12 @@ SEAFILE_TOKEN="your-api-token-here"
 
 ### 4. Pass Secrets to Container
 
-Modify `src/container-runner.ts`:
+Modify `src/container-runner.ts` to pass Seafile credentials to the container.
 
-In the `readSecrets()` function (around line 216), add `'SEAFILE_URL'` and `'SEAFILE_TOKEN'` to the array:
+**See** `modify/src/container-runner.ts` for the required modifications.
+**Architecture notes**: `modify/src/container-runner.ts.intent.md` explains environment variable flow.
+
+**Summary**: In the `readSecrets()` function (around line 216), add `'SEAFILE_URL'` and `'SEAFILE_TOKEN'` to the array:
 
 ```typescript
 function readSecrets(): Record<string, string> {
@@ -211,7 +224,18 @@ function readSecrets(): Record<string, string> {
 
 ### 5. Document in CLAUDE.md
 
-Add this section to `groups/main/CLAUDE.md` after the Seafile section (should be near the beginning since Seafile is an early integration):
+Add the Seafile documentation to `groups/main/CLAUDE.md` (should be near the beginning since Seafile is an early integration).
+
+**See** `modify/groups/main/CLAUDE.md` for the complete agent documentation.
+**Architecture notes**: `modify/groups/main/CLAUDE.md.intent.md` explains documentation decisions.
+
+**Summary**: The documentation includes:
+- Overview of hybrid local/API access
+- All 9 tools with parameters and descriptions
+- When to use share links vs reading files
+- Usage examples for common operations
+
+**Preview**:
 
 ```markdown
 ---

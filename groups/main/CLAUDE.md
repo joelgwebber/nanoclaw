@@ -44,6 +44,30 @@ When you learn something important:
 - Split files larger than 500 lines into folders
 - Keep an index in your memory for the files you create
 
+### Shared Notes in WorkFlowy
+
+The WorkFlowy "Notes" node (ID: e6a0f82e-7fb2-57da-deec-9907d8fb4dfc) is used for shared ephemeral context between you and Sparky.
+
+**At the start of each conversation:**
+- Read all notes from the WorkFlowy Notes node using `mcp__workflowy__workflowy_list_children`
+- Keep them in context for quick reference
+- This includes things like: current parking location, rental car license plate, temporary reminders, etc.
+
+**When user asks to "make a note" or "remember" something ephemeral:**
+- Create or update a node under Notes using `mcp__workflowy__workflowy_create_node`
+- Use clear, concise titles (e.g., "Parking: Level 3, Space A42")
+- Include dates when relevant for context
+- Keep notes concise to avoid bloating the list
+
+**When answering questions about ephemeral facts:**
+- Check the Notes node first (already in context)
+- Example: "Where did I park?" → Check Notes for parking info
+
+**Keep Notes clean:**
+- These are ephemeral, not permanent facts
+- Remove outdated notes when they're no longer relevant
+- For permanent facts, use CLAUDE.md instead
+
 ## WhatsApp Formatting (and other messaging apps)
 
 Do NOT use markdown headings (##) in WhatsApp messages. Only use:
